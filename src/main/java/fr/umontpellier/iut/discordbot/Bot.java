@@ -8,6 +8,8 @@ import net.dv8tion.jda.api.JDABuilder;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Bot implements Runnable {
 	@NotNull
@@ -18,10 +20,23 @@ public class Bot implements Runnable {
 	private final EventManager events;
 	private JDA jda;
 
+	@NotNull
+	private final Map<String, Object> cachedMessages;
+
 	public Bot() {
 		config = new ConfigLoader();
 		commands = new CommandManager(this);
 		events = new EventManager(this);
+		cachedMessages = new HashMap<>();
+	}
+
+	@Override
+	public void run() {
+		this.jda = JDABuilder.createLight(config.get().getToken(), Collections.emptyList())
+				.build();
+
+		events.registerEvents();
+		commands.registerCommands();
 	}
 
 	@NotNull
@@ -42,12 +57,8 @@ public class Bot implements Runnable {
 		return jda;
 	}
 
-	@Override
-	public void run() {
-		this.jda = JDABuilder.createLight(config.get().getToken(), Collections.emptyList())
-				.build();
-
-		events.registerEvents();
-		commands.registerCommands();
+	@NotNull
+	public Map<String, Object> getCachedMessages() {
+		return cachedMessages;
 	}
 }
