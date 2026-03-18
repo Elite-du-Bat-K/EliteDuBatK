@@ -3,6 +3,7 @@ package fr.umontpellier.iut.discordbot;
 import fr.umontpellier.iut.discordbot.commands.CommandManager;
 import fr.umontpellier.iut.discordbot.config.ConfigLoader;
 import fr.umontpellier.iut.discordbot.events.EventManager;
+import fr.umontpellier.iut.discordbot.lib.CachedMessage;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import org.jetbrains.annotations.NotNull;
@@ -21,7 +22,7 @@ public class Bot implements Runnable {
 	private JDA jda;
 
 	@NotNull
-	private final Map<String, Object> cachedMessages;
+	private final Map<String, CachedMessage> cachedMessages;
 
 	public Bot() {
 		config = new ConfigLoader();
@@ -58,7 +59,7 @@ public class Bot implements Runnable {
 	}
 
 	@NotNull
-	public Map<String, Object> getCachedMessages() {
+	public Map<String, CachedMessage> getCachedMessages() {
 		return cachedMessages;
 	}
 }
