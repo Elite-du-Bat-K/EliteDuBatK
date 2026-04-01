@@ -1,3 +1,7 @@
 {
-	"token": ""
+	"token": "",
+	"channels": {
+		"voice_channel": "",
+		"message_delete_channel": ""
+	}
 }
