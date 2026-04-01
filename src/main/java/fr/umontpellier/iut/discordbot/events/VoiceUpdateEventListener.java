@@ -9,6 +9,8 @@ import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
 import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
 import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.utils.TimeFormat;
+import net.dv8tion.jda.api.utils.Timestamp;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;
@@ -31,13 +33,15 @@ public class VoiceUpdateEventListener extends AbstractEventListener {
         Channel channel = Objects.requireNonNull(event.getChannelJoined());
         logger.info("\"{}\" has joined voice channel \"{}\"", event.getMember().getEffectiveName(), channel.getName());
 
+        Timestamp time = TimeFormat.DATE_TIME_SHORT.now();
+
         sendVoiceLog(
                 Container.of(
                         TextDisplay.of("# \uD83D\udd0A Connexion vocal"),
                         Separator.createDivider(Separator.Spacing.SMALL),
                         Section.of(
                                 Thumbnail.fromUrl(event.getMember().getUser().getEffectiveAvatarUrl()),
-                                TextDisplay.ofFormat("**%s** a rejoint le canal vocal **%s**", event.getMember().getAsMention(), channel.getAsMention())
+                                TextDisplay.ofFormat("Membre: %s\nSalon: %s\nDate: %s", event.getMember().getAsMention(), channel.getAsMention(), time.toString())
                         )
                 ).withAccentColor(0x00FF00)
         );
@@ -47,13 +51,15 @@ public class VoiceUpdateEventListener extends AbstractEventListener {
         Channel channel = Objects.requireNonNull(event.getChannelLeft());
         logger.info("\"{}\" has left voice channel \"{}\"", event.getMember().getEffectiveName(), channel.getName());
 
+        Timestamp time = TimeFormat.DATE_TIME_SHORT.now();
+
         sendVoiceLog(
                 Container.of(
                         TextDisplay.of("# \uD83D\uDD07 Connexion vocal"),
                         Separator.createDivider(Separator.Spacing.SMALL),
                         Section.of(
                                 Thumbnail.fromUrl(event.getMember().getUser().getEffectiveAvatarUrl()),
-                                TextDisplay.ofFormat("**%s** a quitté le canal vocal **%s**", event.getMember().getAsMention(), channel.getAsMention())
+                                TextDisplay.ofFormat("Membre: %s\nSalon: %s\nDate: %s", event.getMember().getAsMention(), channel.getAsMention(), time.toString())
                         )
                 ).withAccentColor(0xFF0000)
         );
