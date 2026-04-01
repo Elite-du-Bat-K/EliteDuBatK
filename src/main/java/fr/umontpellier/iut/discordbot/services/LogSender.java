@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public class LogSender extends SharedBot {
@@ -25,9 +26,13 @@ public class LogSender extends SharedBot {
 
     public void sendComponentsToChannelId(String channelId, Collection<? extends MessageTopLevelComponent> components) {
         asSendableChannel(channelId).ifPresentOrElse(
-                chan -> chan.sendMessageComponents(components).queue(),
+                chan -> chan.sendMessageComponents(components).useComponentsV2().queue(),
                 () -> logger.warn("Channel with ID {} not found, cannot send log message", channelId)
         );
+    }
+
+    public void sendComponentToChannelId(String channelId, MessageTopLevelComponent component) {
+        sendComponentsToChannelId(channelId, List.of(component));
     }
 
     public void sendTextToChannelId(String channelId, String text) {
