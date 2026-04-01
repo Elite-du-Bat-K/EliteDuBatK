@@ -3,8 +3,8 @@ package fr.umontpellier.iut.discordbot.config;
 import com.google.gson.annotations.SerializedName;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 
 public class ConfigStructure {
     public enum LogChannel {
@@ -36,8 +36,8 @@ public class ConfigStructure {
     }
 
     private String token;
-    private Map<LogChannel, String> channels;
     private Map<String, List<String>> groups;
+    private Map<String, String> channels;
 
     public String getToken() {
         return token;
@@ -55,7 +55,16 @@ public class ConfigStructure {
 
     @Nullable
     public String getChannelId(LogChannel channel) {
-        return channels == null ? null : channels.get(channel);
+        if (channels == null) {
+            return null;
+        }
+
+        String channelId = channels.get(channel.toString());
+        if (channelId != null) {
+            return channelId;
+        }
+
+        return channels.get(channel.name());
     }
 
     @Nullable
