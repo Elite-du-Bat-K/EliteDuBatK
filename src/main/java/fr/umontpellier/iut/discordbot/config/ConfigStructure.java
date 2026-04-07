@@ -53,6 +53,10 @@ public class ConfigStructure {
         return groups.keySet().stream().toList();
     }
 
+    public Map<String, String> getChannels() {
+        return channels;
+    }
+
     @Nullable
     public String getChannelId(LogChannel channel) {
         if (channels == null) {
