@@ -6,11 +6,16 @@ import java.util.Map;
 
 public class ConfigStructure {
     private String token;
+    private String databasePath;
 
     private Map<String, List<String>> groups;
 
     public String getToken() {
         return token;
+    }
+
+    public String getJDBCUrl() {
+        return "jdbc:sqlite:" + databasePath;
     }
 
     public List<String> getRolesIdForGroup(String group) {
