@@ -1,3 +1,6 @@
 {
-	"token": ""
+	"token": "",
+	"databasePath": "data.db",
+	"adminRole": "",
+	"groups": {}
 }
