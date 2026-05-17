@@ -18,6 +18,8 @@ public class ReadyEventListener extends AbstractEventListener {
 	public void onReady(ReadyEvent event) {
 		logger.info("Bot is ready !");
 
+		getBot().getCommandManager().registerCommands();
+
 		Runnable updateActivity = () -> {
 			this.logger.info("Updating activity...");
 			event.getJDA().getPresence().setActivity(Activity.of(Activity.ActivityType.CUSTOM_STATUS, String.format("Regarde %d serveurs", event.getJDA().getGuilds().size())));

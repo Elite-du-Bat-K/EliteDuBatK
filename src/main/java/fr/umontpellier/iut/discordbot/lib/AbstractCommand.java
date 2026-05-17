@@ -54,4 +54,10 @@ public abstract class AbstractCommand extends SharedBot {
 		}
 		return Optional.of(event.getGuild());
 	}
+
+	protected boolean isAdmin(Member member) {
+		String adminRoleId = getBot().getConfig().get().getAdminRole();
+		if (adminRoleId == null || adminRoleId.isBlank()) return false;
+		return member.getRoles().stream().anyMatch(r -> r.getId().equals(adminRoleId));
+	}
 }

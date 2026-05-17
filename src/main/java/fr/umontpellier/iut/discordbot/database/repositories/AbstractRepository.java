@@ -104,49 +104,62 @@ public abstract class AbstractRepository<DO extends AbstractDataObject> {
         );
     }
 
-    public void insert(DO dataObject) {
-        List<String> columns = columns();
-        List<Object> values = dataObjectToRow(dataObject);
-        String sql;
+    private record NonPkRow(List<String> columns, List<Object> values) {}
 
-        if (columns.isEmpty()) {
-            sql = String.format("INSERT INTO %s DEFAULT VALUES", tableName());
-        } else {
-            String placeholders = String.join(", ", Collections.nCopies(columns.size(), "?"));
-            sql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName(), String.join(", ", columns), placeholders);
-        }
+    private NonPkRow nonPkRow(DO dataObject) {
+        List<String> allColumns = columns();
+        List<Object> allValues = dataObjectToRow(dataObject);
 
-        if (!columns.isEmpty() && columns.size() != values.size()) {
+        if (allColumns.size() != allValues.size()) {
             throw new IllegalStateException("Column count and value count do not match for table " + tableName());
         }
 
+        String pk = primaryKey();
+        List<String> cols = new ArrayList<>();
+        List<Object> vals = new ArrayList<>();
+        for (int i = 0; i < allColumns.size(); i++) {
+            if (!allColumns.get(i).equals(pk)) {
+                cols.add(allColumns.get(i));
+                vals.add(allValues.get(i));
+            }
+        }
+        return new NonPkRow(cols, vals);
+    }
+
+    public void insert(DO dataObject) {
+        NonPkRow row = nonPkRow(dataObject);
+
+        String sql;
+        if (row.columns().isEmpty()) {
+            sql = String.format("INSERT INTO %s DEFAULT VALUES", tableName());
+        } else {
+            String placeholders = String.join(", ", Collections.nCopies(row.columns().size(), "?"));
+            sql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName(), String.join(", ", row.columns()), placeholders);
+        }
+
         update(sql, statement -> {
-            for (int i = 0; i < values.size(); i++) {
-                statement.setObject(i + 1, values.get(i));
+            for (int i = 0; i < row.values().size(); i++) {
+                statement.setObject(i + 1, row.values().get(i));
             }
         });
     }
 
     public int update(DO dataObject) {
-        List<String> columns = columns();
-        List<Object> values = dataObjectToRow(dataObject);
+        NonPkRow row = nonPkRow(dataObject);
 
-        if (columns.isEmpty()) {
+        if (row.columns().isEmpty()) {
             throw new IllegalStateException("Cannot update table " + tableName() + " without updatable columns");
         }
-        if (columns.size() != values.size()) {
-            throw new IllegalStateException("Column count and value count do not match for table " + tableName());
-        }
 
-        String assignments = String.join(", ", columns.stream().map(column -> column + " = ?").toList());
+        String assignments = String.join(", ", row.columns().stream().map(column -> column + " = ?").toList());
         String sql = String.format("UPDATE %s SET %s WHERE %s = ?", tableName(), assignments, primaryKey());
         Object primaryKeyValue = primaryKeyValue(dataObject);
 
         return update(sql, statement -> {
-            for (int i = 0; i < values.size(); i++) {
-                statement.setObject(i + 1, values.get(i));
+            for (int i = 0; i < row.values().size(); i++) {
+                statement.setObject(i + 1, row.values().get(i));
             }
-            statement.setObject(values.size() + 1, primaryKeyValue);
+            statement.setObject(row.values().size() + 1, primaryKeyValue);
         });
     }
 

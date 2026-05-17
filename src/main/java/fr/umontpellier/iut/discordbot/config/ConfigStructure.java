@@ -8,6 +8,7 @@ public class ConfigStructure {
     private String token;
     private String databasePath;
 
+    private String adminRole;
     private Map<String, List<String>> groups;
 
     public String getToken() {
@@ -26,5 +27,9 @@ public class ConfigStructure {
 
     public List<String> getRoles() {
         return groups.keySet().stream().toList();
+    }
+
+    public String getAdminRole() {
+        return adminRole;
     }
 }
