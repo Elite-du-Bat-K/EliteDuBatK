@@ -1,19 +1,34 @@
-name: Build and Publish
+name: CI
 
 on:
-  workflow_run:
-    workflows:
-      - Tests
-    branches:
-      - main
-      - dev
-    types:
-      - completed
+  push:
+  pull_request:
 
 jobs:
+
+  # Test — runs on every push and pull request
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Temurin 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '24'
+          cache: maven
+
+      - name: Run tests
+        run: mvn test
+
+  # Build JAR — runs in parallel after tests pass, on main and dev
   build-jar:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
 
     steps:
       - name: Check out repository
@@ -36,9 +51,12 @@ jobs:
           path: target/*.jar
           if-no-files-found: error
 
+  # Build & push Docker image — runs in parallel after tests pass,
+  # on main (tagged latest) and dev (tagged devel)
   build-docker:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
     permissions:
       contents: read
       packages: write
@@ -60,8 +78,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest,enable=${{ github.event.workflow_run.head_branch == 'main' }}
-            type=raw,value=devel,enable=${{ github.event.workflow_run.head_branch == 'dev' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=devel,enable=${{ github.ref == 'refs/heads/dev' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
