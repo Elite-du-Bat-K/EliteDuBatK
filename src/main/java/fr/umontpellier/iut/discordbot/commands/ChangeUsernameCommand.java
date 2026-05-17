@@ -62,11 +62,11 @@ public class ChangeUsernameCommand extends AbstractCommandWithAutocomplete {
 
 		List<String> choices = new ArrayList<>();
 
-		if (proposedUsername.startsWith(userName)) {
+		if (userName.startsWith(proposedUsername)) {
 			choices.add(userName);
 		}
 
-		if (userNickname != null && proposedUsername.startsWith(userNickname)) {
+		if (userNickname != null && userNickname.startsWith(proposedUsername)) {
 			choices.add(userNickname);
 		}
 
