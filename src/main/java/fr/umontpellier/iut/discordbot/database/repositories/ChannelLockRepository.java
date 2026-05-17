@@ -5,6 +5,7 @@ import fr.umontpellier.iut.discordbot.database.dataobjects.ChannelLock;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,6 +55,7 @@ public class ChannelLockRepository extends AbstractRepository<ChannelLock> {
     @Override
     protected List<Object> dataObjectToRow(ChannelLock dataObject) {
         return List.of(
+                dataObject.getId(),
                 dataObject.getChannelId(),
                 dataObject.getGuildId(),
                 dataObject.getLockedById(),
@@ -76,8 +78,8 @@ public class ChannelLockRepository extends AbstractRepository<ChannelLock> {
                     channel_state_json TEXT NOT NULL
                 )
                 """;
-        try {
-            db.getStatement().execute(sql);
+        try (Statement stmt = db.getStatement()) {
+            stmt.execute(sql);
         } catch (SQLException e) {
             throw new RuntimeException("Failed to initialize channel_locks table", e);
         }

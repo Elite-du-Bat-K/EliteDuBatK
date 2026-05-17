@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -53,7 +54,7 @@ class AbstractRepositoryTest {
 
         @Override
         protected List<String> columns() {
-            return List.of("name");
+            return List.of("id", "name");
         }
 
         @Override
@@ -73,7 +74,7 @@ class AbstractRepositoryTest {
 
         @Override
         protected List<Object> dataObjectToRow(TodoEntry dataObject) {
-            return List.of(dataObject.name());
+            return Arrays.asList(dataObject.id(), dataObject.name());
         }
     }
 
