@@ -7,26 +7,38 @@ import fr.umontpellier.iut.discordbot.events.EventManager;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.Collections;
 
 public class Bot implements Runnable {
+	private static final Logger logger = LoggerFactory.getLogger(Bot.class);
+
 	@NotNull
 	private final ConfigLoader config;
+	@NotNull
+	private final RepositoryFactory repositories;
 	@NotNull
 	private final CommandManager commands;
 	@NotNull
 	private final EventManager events;
-	@NotNull
-	private final RepositoryFactory repositories;
 	private JDA jda;
 
 	public Bot() throws SQLException {
 		config = new ConfigLoader();
+		repositories = new RepositoryFactory(this);
 		commands = new CommandManager(this);
 		events = new EventManager(this);
-		repositories = new RepositoryFactory(this);
+
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			try {
+				repositories.close();
+			} catch (SQLException e) {
+				logger.error("Failed to close database connection", e);
+			}
+		}));
 	}
 
 	@NotNull
@@ -58,6 +70,5 @@ public class Bot implements Runnable {
 				.build();
 
 		events.registerEvents();
-		commands.registerCommands();
 	}
 }
