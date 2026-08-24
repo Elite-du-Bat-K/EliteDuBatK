@@ -14,4 +14,4 @@ WORKDIR /app
 
 COPY --from=build /app/target/app.jar app.jar
 
-CMD ["java", "-jar", "app.jar"]
+CMD ["java", "--enable-native-access=ALL-UNNAMED", "-jar", "app.jar"]
