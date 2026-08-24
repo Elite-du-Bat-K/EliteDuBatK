@@ -176,4 +176,6 @@ gradle-app.setting
 # End of https://www.toptal.com/developers/gitignore/api/java,maven,gradle,visualstudiocode,intellij
 
 config.json
+prod.config.json
+dev.config.json
 *.db
