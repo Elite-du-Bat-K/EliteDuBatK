@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class MigrateClassCommand extends AbstractCommand {
 
@@ -50,16 +51,15 @@ public class MigrateClassCommand extends AbstractCommand {
 
 		if (isValid) {
 			event.deferReply(true).queue();
-			
+
 			String targetClassName = Objects.requireNonNull(classOption).getAsString().trim();
 			Message.Attachment attachment = Objects.requireNonNull(fileOption).getAsAttachment();
 
 			attachment.getProxy().download().thenAccept(inputStream -> {
 				List<String> emails = extractEmails(inputStream);
-				MigrationReport report = processMigration(guild, emails, targetClassName);
-				event.getHook().sendMessage(report.formatSummary()).queue();
+				processMigration(guild, emails, targetClassName, event);
 			}).exceptionally(throwable -> {
-				event.getHook().sendMessage("Erreur lors de l'exécution : " + throwable.getMessage()).queue();
+				event.getHook().sendMessage("Erreur lors du traitement du fichier : " + throwable.getMessage()).queue();
 				return null;
 			});
 		}
@@ -84,35 +84,41 @@ public class MigrateClassCommand extends AbstractCommand {
 		return emails;
 	}
 
-	private MigrationReport processMigration(Guild guild, List<String> emails, String className) {
-		MigrationReport report = new MigrationReport(className);
+	private void processMigration(Guild guild, List<String> emails, String className,
+			SlashCommandInteractionEvent event) {
 		List<Role> matchingRoles = guild.getRolesByName(className, true);
 
 		if (matchingRoles.isEmpty()) {
-			report.setRoleFound(false);
-			return report;
+			event.getHook().sendMessage("Rôle introuvable sur le serveur : " + className).queue();
+			return;
 		}
 
 		Role classRole = matchingRoles.get(0);
+
 		guild.loadMembers().onSuccess(members -> {
+			MigrationReport report = new MigrationReport(className);
+
 			for (String email : emails) {
 				ParsedIdentity identity = parseEmail(email);
-				Member matchedMember = findMember(members, identity.firstName(), identity.lastName());
+				List<Member> candidates = findCandidates(members, identity.firstName(), identity.lastName());
 
-				if (matchedMember == null) {
-					matchedMember = findMember(members, identity.lastName(), identity.firstName());
+				if (candidates.isEmpty()) {
+					candidates = findCandidates(members, identity.lastName(), identity.firstName());
 				}
 
-				if (matchedMember != null) {
-					guild.addRoleToMember(matchedMember, classRole).queue();
-					report.addSuccess(matchedMember.getEffectiveName() + " (" + email + ")");
+				if (candidates.size() == 1) {
+					Member member = candidates.get(0);
+					guild.addRoleToMember(member, classRole).queue();
+					report.addSuccess(member.getEffectiveName() + " (" + email + ")");
+				} else if (candidates.size() > 1) {
+					report.addAmbiguous(email, candidates);
 				} else {
-					report.addFailure(email);
+					report.addNotFound(email);
 				}
 			}
-		});
 
-		return report;
+			event.getHook().sendMessage(report.formatSummary()).queue();
+		});
 	}
 
 	private ParsedIdentity parseEmail(String email) {
@@ -126,84 +132,114 @@ public class MigrateClassCommand extends AbstractCommand {
 		return new ParsedIdentity(first, last);
 	}
 
-	private Member findMember(List<Member> members, String firstName, String lastName) {
-		Member matched = null;
+	private List<Member> findCandidates(List<Member> members, String firstName, String lastName) {
+		List<Member> candidates = new ArrayList<>();
 		String normalizedFirst = normalize(firstName);
 		String normalizedLast = normalize(lastName);
 
-		for (Member member : members) {
-			String normalizedDisplayName = normalize(member.getEffectiveName());
+		if (!(normalizedFirst.isEmpty() || normalizedLast.isEmpty())) {
+			for (Member member : members) {
+				String normalizedDisplayName = normalize(member.getEffectiveName());
 
-			if (matchesIdentity(normalizedDisplayName, normalizedFirst, normalizedLast)) {
-				matched = member;
-				break;
+				if (matchesIdentity(normalizedDisplayName, normalizedFirst, normalizedLast)) {
+					candidates.add(member);
+				}
 			}
 		}
 
-		return matched;
+		return candidates;
 	}
 
 	private boolean matchesIdentity(String displayName, String firstName, String lastName) {
-		if (firstName.isEmpty() || lastName.isEmpty()) {
-			return false;
-		}
-
+		boolean output = false;
 		String[] nameParts = displayName.split("[\\s\\-_]+");
-		if (nameParts.length < 2) {
-			return false;
+
+		if (nameParts.length >= 2) {
+			boolean startsWithFirst = nameParts[0].equalsIgnoreCase(firstName) || firstName.startsWith(nameParts[0]);
+			boolean matchesLast = lastName.startsWith(nameParts[1]);
+
+			output = startsWithFirst && matchesLast;
 		}
 
-		boolean startsWithFirst = nameParts[0].equalsIgnoreCase(firstName) || firstName.startsWith(nameParts[0]);
-		boolean matchesLastInitialOrMore = lastName.startsWith(nameParts[1].substring(0, 1));
-
-		return startsWithFirst && matchesLastInitialOrMore;
+		return output;
 	}
 
 	private String normalize(String input) {
-		if (input == null) {
-			return "";
+		String output = "";
+
+		if (input != null) {
+			String normalized = Normalizer.normalize(input, Normalizer.Form.NFD);
+
+			output = DIACRITICS_PATTERN.matcher(normalized).replaceAll("").toLowerCase().trim();
 		}
-		String normalized = Normalizer.normalize(input, Normalizer.Form.NFD);
-		return DIACRITICS_PATTERN.matcher(normalized).replaceAll("").toLowerCase().trim();
+
+		return output;
 	}
 
-	private record ParsedIdentity(String firstName, String lastName) {}
+	private record ParsedIdentity(String firstName, String lastName) {
+	}
+
+	private static class AmbiguousEntry {
+		private final String email;
+		private final List<Member> candidates;
+
+		public AmbiguousEntry(String email, List<Member> candidates) {
+			this.email = email;
+			this.candidates = candidates;
+		}
+
+		public String getEmail() {
+			return email;
+		}
+
+		public List<Member> getCandidates() {
+			return candidates;
+		}
+	}
 
 	private static class MigrationReport {
 		private final String className;
-		private boolean roleFound = true;
 		private final List<String> succeeded = new ArrayList<>();
-		private final List<String> failed = new ArrayList<>();
+		private final List<String> notFound = new ArrayList<>();
+		private final List<AmbiguousEntry> ambiguous = new ArrayList<>();
 
 		public MigrationReport(String className) {
 			this.className = className;
-		}
-
-		public void setRoleFound(boolean roleFound) {
-			this.roleFound = roleFound;
 		}
 
 		public void addSuccess(String item) {
 			succeeded.add(item);
 		}
 
-		public void addFailure(String item) {
-			failed.add(item);
+		public void addNotFound(String email) {
+			notFound.add(email);
+		}
+
+		public void addAmbiguous(String email, List<Member> candidates) {
+			ambiguous.add(new AmbiguousEntry(email, candidates));
 		}
 
 		public String formatSummary() {
-			if (!roleFound) {
-				return "Rôle introuvable sur le serveur : " + className;
+			StringBuilder sb = new StringBuilder();
+			sb.append("# Rapport de migration vers **").append(className).append("** :\n");
+			sb.append("- Succès : ").append(succeeded.size()).append("\n");
+			sb.append("- Non trouvés : ").append(notFound.size()).append("\n");
+			sb.append("- Ambiguïtés : ").append(ambiguous.size()).append("\n");
+
+			if (!ambiguous.isEmpty()) {
+				sb.append("\n## Adresses ambiguës (conflits détectés) :**\n");
+				for (AmbiguousEntry entry : ambiguous) {
+					String usernames = entry.getCandidates().stream()
+							.map(m -> "`@" + m.getUser().getName() + "` (" + m.getEffectiveName() + ")")
+							.collect(Collectors.joining(", "));
+					sb.append("- `").append(entry.getEmail()).append("` -> Correspondances : ").append(usernames)
+							.append("\n");
+				}
 			}
 
-			StringBuilder sb = new StringBuilder();
-			sb.append("Migration vers la classe **").append(className).append("** terminée.\n");
-			sb.append("Membres traités avec succès : ").append(succeeded.size()).append("\n");
-			sb.append("Échecs/Introuvables : ").append(failed.size()).append("\n");
-
-			if (!failed.isEmpty()) {
-				sb.append("\n**Liste des adresses non trouvées :**\n");
-				for (String email : failed) {
+			if (!notFound.isEmpty()) {
+				sb.append("\n## **Adresses non trouvées :**\n");
+				for (String email : notFound) {
 					sb.append("- `").append(email).append("`\n");
 				}
 			}
