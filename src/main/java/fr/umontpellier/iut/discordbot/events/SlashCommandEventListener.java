@@ -1,7 +1,7 @@
 package fr.umontpellier.iut.discordbot.events;
 
 import fr.umontpellier.iut.discordbot.Bot;
-import fr.umontpellier.iut.discordbot.commands.migration.MigrateChannelsCommand;
+import fr.umontpellier.iut.discordbot.lib.AbstractCommand;
 import fr.umontpellier.iut.discordbot.lib.AbstractEventListener;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
@@ -14,30 +14,26 @@ public class SlashCommandEventListener extends AbstractEventListener {
 
 	@Override
 	public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
-		this.getBot()
-				.getCommandManager()
-				.getCommands()
-				.stream()
-				.filter(command -> command
-						.getCommandInformation()
-						.getName()
-						.equals(event.getName())
-				).findFirst()
-				.ifPresentOrElse(
-						command -> command.execute(event),
-						() -> event.reply("Commande inconnue...").queue()
-				);
+		AbstractCommand targetCommand = null;
+		boolean isCommandFound = false;
+
+		for (AbstractCommand command : this.getBot().getCommandManager().getCommands()) {
+			boolean matchesName = command.getCommandInformation().getName().equals(event.getName());
+			if (matchesName) {
+				targetCommand = command;
+				isCommandFound = true;
+			}
+		}
+
+		if (isCommandFound) {
+			targetCommand.execute(event);
+		}
+
+		if (!isCommandFound) {
+			event.reply("Commande inconnue...").setEphemeral(true).queue();
+		}
 	}
 
 	@Override
-	public void onButtonInteraction(@NotNull ButtonInteractionEvent event) {
-		this.getBot()
-				.getCommandManager()
-				.getCommands()
-				.stream()
-				.filter(MigrateChannelsCommand.class::isInstance)
-				.map(MigrateChannelsCommand.class::cast)
-				.findFirst()
-				.ifPresent(command -> command.handleButtonInteraction(event));
-	}
+	public void onButtonInteraction(@NotNull ButtonInteractionEvent event) {}
 }
