@@ -179,3 +179,5 @@ config.json
 prod.config.json
 dev.config.json
 *.db
+
+null
