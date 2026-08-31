@@ -12,6 +12,7 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import net.dv8tion.jda.api.exceptions.*;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Year;
@@ -69,28 +70,32 @@ public class MigrateThirdYearCommand extends AbstractCommand {
 				boolean isA3 = member.getRoles().contains(a3Role);
 
 				if (isA3) {
-					addChange(roleChangesMap, member, anciensRole, true);
-					addChange(roleChangesMap, member, a3Role, false);
+					try {
+						addChange(roleChangesMap, member, anciensRole, true);
+						addChange(roleChangesMap, member, a3Role, false);
 
-					for (Role role : member.getRoles()) {
-						boolean isGX = role.getName().matches("G[1-4]|G-Sète");
-						if (isGX) {
-							addChange(roleChangesMap, member, role, false);
+						for (Role role : member.getRoles()) {
+							boolean isGX = role.getName().matches("G[1-4]|G-Sète");
+							if (isGX) {
+								addChange(roleChangesMap, member, role, false);
+							}
 						}
+
+						String originalName = member.getEffectiveName();
+						String newName = originalName;
+						int maxLen = 32 - yearSuffix.length();
+						boolean tooLong = (originalName.length() > maxLen);
+
+						if (tooLong) {
+							newName = originalName.substring(0, maxLen);
+						}
+
+						newName = newName + yearSuffix;
+						nicknameChangesMap.put(member, newName);
+						report.addSuccess(originalName + " -> " + newName);
+					} catch (HierarchyException e) {
+						System.err.println("Impossible de migrer " + member.getEffectiveName() + ". (HierarchyException)");
 					}
-
-					String originalName = member.getEffectiveName();
-					String newName = originalName;
-					int maxLen = 32 - yearSuffix.length();
-					boolean tooLong = (originalName.length() > maxLen);
-
-					if (tooLong) {
-						newName = originalName.substring(0, maxLen);
-					}
-
-					newName = newName + yearSuffix;
-					nicknameChangesMap.put(member, newName);
-					report.addSuccess(originalName + " -> " + newName);
 				}
 			}
 

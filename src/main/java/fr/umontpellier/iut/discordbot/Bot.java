@@ -6,6 +6,8 @@ import fr.umontpellier.iut.discordbot.database.RepositoryFactory;
 import fr.umontpellier.iut.discordbot.events.EventManager;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.requests.GatewayIntent;
+
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,8 +68,11 @@ public class Bot implements Runnable {
 
 	@Override
 	public void run() {
-		this.jda = JDABuilder.createLight(config.get().getToken(), Collections.emptyList())
-				.build();
+		JDABuilder builder = JDABuilder.createLight(config.get().getToken(), Collections.emptyList());
+		builder.createDefault(getConfig().get().getToken());
+		builder.enableIntents(GatewayIntent.GUILD_MEMBERS);
+
+		this.jda = builder.build();
 
 		events.registerEvents();
 	}

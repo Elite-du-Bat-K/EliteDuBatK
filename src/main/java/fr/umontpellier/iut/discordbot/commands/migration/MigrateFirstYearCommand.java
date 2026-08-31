@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.exceptions.HierarchyException;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
@@ -270,28 +271,28 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 
 			if (candidateCount == 1) {
 				Member member = candidates.get(0);
-				addChange(roleChangesMap, member, a2Role, true);
-				addChange(roleChangesMap, member, qRole, true);
+				try {
+					addChange(roleChangesMap, member, a2Role, true);
+					addChange(roleChangesMap, member, qRole, true);
 
-				boolean isA3 = member.getRoles().contains(a3Role);
-				if (isA3) {
-					addChange(roleChangesMap, member, a3Role, false);
-					for (Role role : member.getRoles()) {
-						boolean isGX = role.getName().matches("G\\d+");
-						if (isGX) {
-							addChange(roleChangesMap, member, role, false);
+					boolean isA3 = member.getRoles().contains(a3Role);
+					if (isA3) {
+						addChange(roleChangesMap, member, a3Role, false);
+						for (Role role : member.getRoles()) {
+							boolean isGX = role.getName().matches("G\\d+");
+							if (isGX) {
+								addChange(roleChangesMap, member, role, false);
+							}
 						}
 					}
+
+					report.addSuccess(member.getEffectiveName() + " (" + email + ") -> " + qName);
+				} catch (HierarchyException e) {
+					System.err.println("Impossible de migrer " + member.getEffectiveName() + ". (HierarchyException)");
 				}
-
-				report.addSuccess(member.getEffectiveName() + " (" + email + ") -> " + qName);
-			}
-
-			if (candidateCount > 1) {
+			} else if (candidateCount > 1) {
 				report.addAmbiguous(email, candidates);
-			}
-
-			if (candidateCount == 0) {
+			} else if (candidateCount == 0) {
 				report.addNotFound(email);
 			}
 		}

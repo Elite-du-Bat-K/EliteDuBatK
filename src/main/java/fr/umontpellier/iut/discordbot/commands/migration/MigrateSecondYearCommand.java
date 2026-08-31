@@ -8,6 +8,7 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.exceptions.HierarchyException;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
@@ -65,41 +66,45 @@ public class MigrateSecondYearCommand extends AbstractCommand {
 			for (Member member : members) {
 				boolean isA2 = member.getRoles().contains(a2Role);
 
-				if (isA2) {
-					addChange(roleChangesMap, member, a3Role, true);
-					addChange(roleChangesMap, member, a2Role, false);
+				try {
+					if (isA2) {
+						addChange(roleChangesMap, member, a3Role, true);
+						addChange(roleChangesMap, member, a2Role, false);
 
-					for (String qName : qGroups) {
-						Role qRole = getRoleByName(guild, qName);
-						boolean hasQRole = (qRole != null && member.getRoles().contains(qRole));
+						for (String qName : qGroups) {
+							Role qRole = getRoleByName(guild, qName);
+							boolean hasQRole = (qRole != null && member.getRoles().contains(qRole));
 
-						if (hasQRole) {
-							String gName = qName.replace("Q", "G");
-							Role gRole = getRoleByName(guild, gName);
-							boolean hasGRole = (gRole != null);
+							if (hasQRole) {
+								String gName = qName.replace("Q", "G");
+								Role gRole = getRoleByName(guild, gName);
+								boolean hasGRole = (gRole != null);
 
-							if (hasGRole) {
-								addChange(roleChangesMap, member, gRole, true);
-								addChange(roleChangesMap, member, qRole, false);
+								if (hasGRole) {
+									addChange(roleChangesMap, member, gRole, true);
+									addChange(roleChangesMap, member, qRole, false);
+								}
+							}
+
+							String modoQName = "Modo " + qName;
+							Role modoQRole = getRoleByName(guild, modoQName);
+							boolean hasModoQRole = (modoQRole != null && member.getRoles().contains(modoQRole));
+
+							if (hasModoQRole) {
+								String modoGName = "Modo " + qName.replace("Q", "G");
+								Role modoGRole = getRoleByName(guild, modoGName);
+								boolean hasModoGRole = (modoGRole != null);
+
+								if (hasModoGRole) {
+									addChange(roleChangesMap, member, modoGRole, true);
+									addChange(roleChangesMap, member, modoQRole, false);
+								}
 							}
 						}
-
-						String modoQName = "Modo " + qName;
-						Role modoQRole = getRoleByName(guild, modoQName);
-						boolean hasModoQRole = (modoQRole != null && member.getRoles().contains(modoQRole));
-
-						if (hasModoQRole) {
-							String modoGName = "Modo " + qName.replace("Q", "G");
-							Role modoGRole = getRoleByName(guild, modoGName);
-							boolean hasModoGRole = (modoGRole != null);
-
-							if (hasModoGRole) {
-								addChange(roleChangesMap, member, modoGRole, true);
-								addChange(roleChangesMap, member, modoQRole, false);
-							}
-						}
+						report.addSuccess(member.getEffectiveName());
 					}
-					report.addSuccess(member.getEffectiveName());
+				} catch (HierarchyException e) {
+					System.err.println("Impossible de migrer " + member.getEffectiveName() + ". (HierarchyException)");
 				}
 			}
 
