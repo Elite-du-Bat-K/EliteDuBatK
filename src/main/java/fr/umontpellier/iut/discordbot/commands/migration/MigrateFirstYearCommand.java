@@ -308,14 +308,26 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 
 			if (isTarget) {
 				for (GuildChannel channel : category.getChannels()) {
-					boolean isCopyable = channel instanceof ICopyableChannel;
+					boolean isForum = channel instanceof net.dv8tion.jda.api.entities.channel.concrete.ForumChannel;
+					boolean isCopyable = channel instanceof net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel;
+					CompletableFuture<Void> processFuture = null;
 
-					if (isCopyable) {
-						ICopyableChannel copyable = (ICopyableChannel) channel;
-						CompletableFuture<Void> copyFuture = copyable.createCopy()
+					if (isForum) {
+						processFuture = category.createForumChannel(channel.getName())
 								.submit()
 								.thenCompose(ignored -> channel.delete().submit());
-						futures.add(copyFuture);
+					}
+
+					if (!isForum && isCopyable) {
+						net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel copyable = (net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel) channel;
+						processFuture = copyable.createCopy()
+								.submit()
+								.thenCompose(ignored -> channel.delete().submit());
+					}
+
+					boolean hasFuture = (processFuture != null);
+					if (hasFuture) {
+						futures.add(processFuture);
 					}
 				}
 			}
