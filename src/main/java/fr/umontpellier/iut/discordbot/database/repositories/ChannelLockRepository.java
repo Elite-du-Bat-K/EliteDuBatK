@@ -109,5 +109,6 @@ public class ChannelLockRepository extends AbstractRepository<ChannelLock> {
                 statement -> statement.setString(1, channelId)
         );
     }
+
 }
 
