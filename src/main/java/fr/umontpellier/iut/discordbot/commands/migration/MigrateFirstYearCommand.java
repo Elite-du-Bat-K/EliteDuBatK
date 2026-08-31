@@ -9,14 +9,14 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
-import net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
-import net.dv8tion.jda.api.exceptions.HierarchyException;
+import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import net.dv8tion.jda.api.managers.channel.concrete.CategoryManager;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.BufferedReader;
@@ -66,7 +66,7 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 		boolean isValid = (guild != null && q1Opt != null && q2Opt != null && q3Opt != null && q4Opt != null);
 
 		if (isValid) {
-			event.deferReply(true).queue();
+			event.deferReply(false).queue();
 
 			CompletableFuture<List<String>> q1Future = downloadEmails(q1Opt);
 			CompletableFuture<List<String>> q2Future = downloadEmails(q2Opt);
@@ -172,20 +172,39 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 			}
 
 			if (!hasExecutionError) {
-				String summary = report.formatSummary();
-				boolean isTooLong = summary.length() > 2000;
-
-				if (isTooLong) {
-					event.getHook().sendMessage(
-							"Migration terminée. Le rapport est trop long pour être affiché en un seul message.")
-							.queue();
-				}
-
-				if (!isTooLong) {
-					event.getHook().sendMessage(summary).queue();
-				}
+				sendChunkedMessage(event.getHook(), report.formatSummary());
 			}
 		});
+	}
+
+	private void sendChunkedMessage(InteractionHook hook, String message) {
+		int length = message.length();
+		boolean isTooLong = length > 1900;
+
+		if (!isTooLong) {
+			hook.sendMessage(message).queue();
+		}
+
+		if (isTooLong) {
+			String[] lines = message.split("\n");
+			StringBuilder currentChunk = new StringBuilder();
+
+			for (String line : lines) {
+				boolean willOverflow = (currentChunk.length() + line.length() + 1) > 1900;
+
+				if (willOverflow) {
+					hook.sendMessage(currentChunk.toString()).queue();
+					currentChunk = new StringBuilder();
+				}
+
+				currentChunk.append(line).append("\n");
+			}
+
+			boolean hasRemaining = currentChunk.length() > 0;
+			if (hasRemaining) {
+				hook.sendMessage(currentChunk.toString()).queue();
+			}
+		}
 	}
 
 	private CompletableFuture<Void> applyGeneralChannelUpdate(Guild guild) {
@@ -194,6 +213,7 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 				.getTextChannelsByName("🎓│général-a1", true);
 		Role a1Role = getRoleByName(guild, "Année 1");
 		Role a2Role = getRoleByName(guild, "Année 2");
+		Role publicRole = guild.getPublicRole();
 		boolean isValid = (!channels.isEmpty() && a1Role != null && a2Role != null);
 
 		if (isValid) {
@@ -206,7 +226,8 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 					.thenCompose(newChannel -> channel.getManager()
 							.setName("🎓│général-a2")
 							.putRolePermissionOverride(a2Role.getIdLong(), viewPermission, null)
-							.putRolePermissionOverride(a1Role.getIdLong(), null, viewPermission)
+							.putRolePermissionOverride(publicRole.getIdLong(), null, viewPermission)
+							.removePermissionOverride(a1Role.getIdLong())
 							.submit());
 		}
 
@@ -225,6 +246,11 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 			List<Role> memberRoles = member.getRoles();
 			boolean isSSete = memberRoles.contains(sSeteRole);
 			boolean isA1 = memberRoles.contains(a1Role);
+			boolean isTarget = (isSSete || isA1);
+
+			if (isTarget) {
+				cleanTransverseRoles(roleChangesMap, member);
+			}
 
 			if (isSSete) {
 				addChange(roleChangesMap, member, qSeteRole, true);
@@ -252,6 +278,19 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 		}
 	}
 
+	private void cleanTransverseRoles(Map<Member, RoleChanges> map, Member member) {
+		for (Role role : member.getRoles()) {
+			String name = role.getName();
+			boolean isDelegue = name.equals("Délégué");
+			boolean isModoAnnee = name.matches("Modo Année [1-3]");
+			boolean isModoClasse = name.matches("Modo [SQG]([1-6]|-Sète)");
+
+			if (isDelegue || isModoAnnee || isModoClasse) {
+				addChange(map, member, role, false);
+			}
+		}
+	}
+
 	private void applyQListLogic(Guild guild, List<Member> members, List<String> emails, String qName,
 			Map<Member, RoleChanges> roleChangesMap, MigrationReport report) {
 		Role a2Role = getRoleByName(guild, "Année 2");
@@ -271,28 +310,28 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 
 			if (candidateCount == 1) {
 				Member member = candidates.get(0);
-				try {
-					addChange(roleChangesMap, member, a2Role, true);
-					addChange(roleChangesMap, member, qRole, true);
+				addChange(roleChangesMap, member, a2Role, true);
+				addChange(roleChangesMap, member, qRole, true);
 
-					boolean isA3 = member.getRoles().contains(a3Role);
-					if (isA3) {
-						addChange(roleChangesMap, member, a3Role, false);
-						for (Role role : member.getRoles()) {
-							boolean isGX = role.getName().matches("G\\d+");
-							if (isGX) {
-								addChange(roleChangesMap, member, role, false);
-							}
+				boolean isA3 = member.getRoles().contains(a3Role);
+				if (isA3) {
+					addChange(roleChangesMap, member, a3Role, false);
+					for (Role role : member.getRoles()) {
+						boolean isGX = role.getName().matches("G\\d+");
+						if (isGX) {
+							addChange(roleChangesMap, member, role, false);
 						}
 					}
-
-					report.addSuccess(member.getEffectiveName() + " (" + email + ") -> " + qName);
-				} catch (HierarchyException e) {
-					System.err.println("Impossible de migrer " + member.getEffectiveName() + ". (HierarchyException)");
 				}
-			} else if (candidateCount > 1) {
+
+				report.addSuccess(member.getEffectiveName() + " (" + email + ") -> " + qName);
+			}
+
+			if (candidateCount > 1) {
 				report.addAmbiguous(email, candidates);
-			} else if (candidateCount == 0) {
+			}
+
+			if (candidateCount == 0) {
 				report.addNotFound(email);
 			}
 		}
@@ -307,21 +346,43 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 			boolean isTarget = name.matches("S[1-6]") || name.equals("S-Sète");
 
 			if (isTarget) {
+				Role sxRole = getRoleByName(guild, name);
+				Role modoSxRole = getRoleByName(guild, "Modo " + name);
+				Role publicRole = guild.getPublicRole();
+				List<Permission> viewPerm = new ArrayList<>();
+				viewPerm.add(Permission.VIEW_CHANNEL);
+
+				CategoryManager manager = category.getManager();
+				boolean hasSxRole = (sxRole != null);
+				boolean hasModoSxRole = (modoSxRole != null);
+
+				manager = manager.putRolePermissionOverride(publicRole.getIdLong(), null, viewPerm);
+
+				if (hasSxRole) {
+					manager = manager.putRolePermissionOverride(sxRole.getIdLong(), viewPerm, null);
+				}
+
+				if (hasModoSxRole) {
+					manager = manager.putRolePermissionOverride(modoSxRole.getIdLong(), viewPerm, null);
+				}
+
+				CompletableFuture<Void> categoryFuture = manager.submit();
+				futures.add(categoryFuture);
+
 				for (GuildChannel channel : category.getChannels()) {
 					boolean isForum = channel instanceof net.dv8tion.jda.api.entities.channel.concrete.ForumChannel;
 					boolean isCopyable = channel instanceof net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel;
 					CompletableFuture<Void> processFuture = null;
 
 					if (isForum) {
-						processFuture = category.createForumChannel(channel.getName())
-								.submit()
+						processFuture = categoryFuture
+								.thenCompose(ignored -> category.createForumChannel(channel.getName()).submit())
 								.thenCompose(ignored -> channel.delete().submit());
 					}
 
 					if (!isForum && isCopyable) {
 						net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel copyable = (net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel) channel;
-						processFuture = copyable.createCopy()
-								.submit()
+						processFuture = categoryFuture.thenCompose(ignored -> copyable.createCopy().submit())
 								.thenCompose(ignored -> channel.delete().submit());
 					}
 
@@ -361,9 +422,7 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 
 			if (isAdd) {
 				changes.addRole(role);
-			}
-
-			if (!isAdd) {
+			} else {
 				changes.removeRole(role);
 			}
 		}
@@ -448,7 +507,8 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 
 		if (isNotNull) {
 			String normalized = Normalizer.normalize(input, Normalizer.Form.NFD);
-			output = DIACRITICS_PATTERN.matcher(normalized).replaceAll("").toLowerCase().trim();
+			String noDiacritics = DIACRITICS_PATTERN.matcher(normalized).replaceAll("");
+			output = noDiacritics.replace("[", "").replace("]", "").toLowerCase().trim();
 		}
 
 		return output;
@@ -525,6 +585,14 @@ public class MigrateFirstYearCommand extends AbstractCommand {
 			sb.append("- Succès : ").append(succeeded.size()).append("\n");
 			sb.append("- Non trouvés : ").append(notFound.size()).append("\n");
 			sb.append("- Ambiguïtés : ").append(ambiguous.size()).append("\n");
+
+			boolean hasSuccess = !succeeded.isEmpty();
+			if (hasSuccess) {
+				sb.append("\n## Étudiants migrés avec succès :\n");
+				for (String entry : succeeded) {
+					sb.append("- `").append(entry).append("`\n");
+				}
+			}
 
 			boolean hasAmbiguous = !ambiguous.isEmpty();
 			if (hasAmbiguous) {

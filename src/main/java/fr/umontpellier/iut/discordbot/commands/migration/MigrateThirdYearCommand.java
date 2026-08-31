@@ -9,10 +9,10 @@ import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
-import net.dv8tion.jda.api.exceptions.*;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Year;
@@ -41,7 +41,7 @@ public class MigrateThirdYearCommand extends AbstractCommand {
 		boolean isValid = (guild != null);
 
 		if (isValid) {
-			event.deferReply(true).queue();
+			event.deferReply(false).queue();
 
 			guild.loadMembers().onSuccess(members -> {
 				processMigration(guild, members, event);
@@ -70,32 +70,30 @@ public class MigrateThirdYearCommand extends AbstractCommand {
 				boolean isA3 = member.getRoles().contains(a3Role);
 
 				if (isA3) {
-					try {
-						addChange(roleChangesMap, member, anciensRole, true);
-						addChange(roleChangesMap, member, a3Role, false);
+					cleanTransverseRoles(roleChangesMap, member);
 
-						for (Role role : member.getRoles()) {
-							boolean isGX = role.getName().matches("G[1-4]|G-Sète");
-							if (isGX) {
-								addChange(roleChangesMap, member, role, false);
-							}
+					addChange(roleChangesMap, member, anciensRole, true);
+					addChange(roleChangesMap, member, a3Role, false);
+
+					for (Role role : member.getRoles()) {
+						boolean isGX = role.getName().matches("G[1-4]|G-Sète");
+						if (isGX) {
+							addChange(roleChangesMap, member, role, false);
 						}
-
-						String originalName = member.getEffectiveName();
-						String newName = originalName;
-						int maxLen = 32 - yearSuffix.length();
-						boolean tooLong = (originalName.length() > maxLen);
-
-						if (tooLong) {
-							newName = originalName.substring(0, maxLen);
-						}
-
-						newName = newName + yearSuffix;
-						nicknameChangesMap.put(member, newName);
-						report.addSuccess(originalName + " -> " + newName);
-					} catch (HierarchyException e) {
-						System.err.println("Impossible de migrer " + member.getEffectiveName() + ". (HierarchyException)");
 					}
+
+					String originalName = member.getEffectiveName();
+					String newName = originalName;
+					int maxLen = 32 - yearSuffix.length();
+					boolean tooLong = (originalName.length() > maxLen);
+
+					if (tooLong) {
+						newName = originalName.substring(0, maxLen);
+					}
+
+					newName = newName + yearSuffix;
+					nicknameChangesMap.put(member, newName);
+					report.addSuccess(originalName + " -> " + newName);
 				}
 			}
 
@@ -109,22 +107,12 @@ public class MigrateThirdYearCommand extends AbstractCommand {
 				boolean hasExecutionError = (exception != null);
 
 				if (hasExecutionError) {
-					event.getHook().sendMessage("La migration s'est terminée avec des erreurs partielles.").queue();
+					event.getHook().sendMessage(
+							"La migration s'est terminée avec des erreurs partielles (certains pseudos n'ont pas pu être modifiés à cause de la hiérarchie des rôles).")
+							.queue();
 				}
 
-				if (!hasExecutionError) {
-					String summary = report.formatSummary();
-					boolean isTooLong = summary.length() > 2000;
-
-					if (isTooLong) {
-						event.getHook().sendMessage("Migration terminée. Le rapport est trop long pour être affiché.")
-								.queue();
-					}
-
-					if (!isTooLong) {
-						event.getHook().sendMessage(summary).queue();
-					}
-				}
+				sendChunkedMessage(event.getHook(), report.formatSummary());
 			});
 		}
 
@@ -132,6 +120,49 @@ public class MigrateThirdYearCommand extends AbstractCommand {
 			event.getHook()
 					.sendMessage("Erreur : les rôles 'Année 3' ou 'Les Anciens' sont introuvables sur le serveur.")
 					.queue();
+		}
+	}
+
+	private void cleanTransverseRoles(Map<Member, RoleChanges> map, Member member) {
+		for (Role role : member.getRoles()) {
+			String name = role.getName();
+			boolean isDelegue = name.equals("Délégué");
+			boolean isModoAnnee = name.matches("Modo Année [1-3]");
+			boolean isModoClasse = name.matches("Modo [SQG]([1-6]|-Sète)");
+
+			if (isDelegue || isModoAnnee || isModoClasse) {
+				addChange(map, member, role, false);
+			}
+		}
+	}
+
+	private void sendChunkedMessage(InteractionHook hook, String message) {
+		int length = message.length();
+		boolean isTooLong = length > 1900;
+
+		if (!isTooLong) {
+			hook.sendMessage(message).queue();
+		}
+
+		if (isTooLong) {
+			String[] lines = message.split("\n");
+			StringBuilder currentChunk = new StringBuilder();
+
+			for (String line : lines) {
+				boolean willOverflow = (currentChunk.length() + line.length() + 1) > 1900;
+
+				if (willOverflow) {
+					hook.sendMessage(currentChunk.toString()).queue();
+					currentChunk = new StringBuilder();
+				}
+
+				currentChunk.append(line).append("\n");
+			}
+
+			boolean hasRemaining = currentChunk.length() > 0;
+			if (hasRemaining) {
+				hook.sendMessage(currentChunk.toString()).queue();
+			}
 		}
 	}
 

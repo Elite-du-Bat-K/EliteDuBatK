@@ -1,24 +1,29 @@
 package fr.umontpellier.iut.discordbot.commands.migration;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+import org.jetbrains.annotations.NotNull;
+
 import fr.umontpellier.iut.discordbot.Bot;
 import fr.umontpellier.iut.discordbot.lib.AbstractCommand;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.entities.channel.attribute.ICategorizableChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.Category;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
-import net.dv8tion.jda.api.exceptions.HierarchyException;
+import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
-import org.jetbrains.annotations.NotNull;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import net.dv8tion.jda.api.managers.channel.concrete.CategoryManager;
+import net.dv8tion.jda.api.requests.restaction.ChannelAction;
 
 public class MigrateSecondYearCommand extends AbstractCommand {
 
@@ -39,7 +44,7 @@ public class MigrateSecondYearCommand extends AbstractCommand {
 		boolean isValid = (guild != null);
 
 		if (isValid) {
-			event.deferReply(true).queue();
+			event.deferReply(false).queue();
 
 			guild.loadMembers().onSuccess(members -> {
 				processMigration(guild, members, event);
@@ -66,45 +71,43 @@ public class MigrateSecondYearCommand extends AbstractCommand {
 			for (Member member : members) {
 				boolean isA2 = member.getRoles().contains(a2Role);
 
-				try {
-					if (isA2) {
-						addChange(roleChangesMap, member, a3Role, true);
-						addChange(roleChangesMap, member, a2Role, false);
+				if (isA2) {
+					cleanTransverseRoles(roleChangesMap, member);
 
-						for (String qName : qGroups) {
-							Role qRole = getRoleByName(guild, qName);
-							boolean hasQRole = (qRole != null && member.getRoles().contains(qRole));
+					addChange(roleChangesMap, member, a3Role, true);
+					addChange(roleChangesMap, member, a2Role, false);
 
-							if (hasQRole) {
-								String gName = qName.replace("Q", "G");
-								Role gRole = getRoleByName(guild, gName);
-								boolean hasGRole = (gRole != null);
+					for (String qName : qGroups) {
+						Role qRole = getRoleByName(guild, qName);
+						boolean hasQRole = (qRole != null && member.getRoles().contains(qRole));
 
-								if (hasGRole) {
-									addChange(roleChangesMap, member, gRole, true);
-									addChange(roleChangesMap, member, qRole, false);
-								}
-							}
+						if (hasQRole) {
+							String gName = qName.replace("Q", "G");
+							Role gRole = getRoleByName(guild, gName);
+							boolean hasGRole = (gRole != null);
 
-							String modoQName = "Modo " + qName;
-							Role modoQRole = getRoleByName(guild, modoQName);
-							boolean hasModoQRole = (modoQRole != null && member.getRoles().contains(modoQRole));
-
-							if (hasModoQRole) {
-								String modoGName = "Modo " + qName.replace("Q", "G");
-								Role modoGRole = getRoleByName(guild, modoGName);
-								boolean hasModoGRole = (modoGRole != null);
-
-								if (hasModoGRole) {
-									addChange(roleChangesMap, member, modoGRole, true);
-									addChange(roleChangesMap, member, modoQRole, false);
-								}
+							if (hasGRole) {
+								addChange(roleChangesMap, member, gRole, true);
+								addChange(roleChangesMap, member, qRole, false);
 							}
 						}
-						report.addSuccess(member.getEffectiveName());
+
+						String modoQName = "Modo " + qName;
+						Role modoQRole = getRoleByName(guild, modoQName);
+						boolean hasModoQRole = (modoQRole != null && member.getRoles().contains(modoQRole));
+
+						if (hasModoQRole) {
+							String modoGName = "Modo " + qName.replace("Q", "G");
+							Role modoGRole = getRoleByName(guild, modoGName);
+							boolean hasModoGRole = (modoGRole != null);
+
+							if (hasModoGRole) {
+								addChange(roleChangesMap, member, modoGRole, true);
+								addChange(roleChangesMap, member, modoQRole, false);
+							}
+						}
 					}
-				} catch (HierarchyException e) {
-					System.err.println("Impossible de migrer " + member.getEffectiveName() + ". (HierarchyException)");
+					report.addSuccess(member.getEffectiveName());
 				}
 			}
 
@@ -121,17 +124,7 @@ public class MigrateSecondYearCommand extends AbstractCommand {
 				}
 
 				if (!hasExecutionError) {
-					String summary = report.formatSummary();
-					boolean isTooLong = (summary.length() > 2000);
-
-					if (isTooLong) {
-						event.getHook().sendMessage("Migration terminée. Le rapport est trop long pour être affiché.")
-								.queue();
-					}
-
-					if (!isTooLong) {
-						event.getHook().sendMessage(summary).queue();
-					}
+					sendChunkedMessage(event.getHook(), report.formatSummary());
 				}
 			});
 		}
@@ -141,12 +134,56 @@ public class MigrateSecondYearCommand extends AbstractCommand {
 		}
 	}
 
+	private void cleanTransverseRoles(Map<Member, RoleChanges> map, Member member) {
+		for (Role role : member.getRoles()) {
+			String name = role.getName();
+			boolean isDelegue = name.equals("Délégué");
+			boolean isModoAnnee = name.matches("Modo Année [1-3]");
+			boolean isModoClasse = name.matches("Modo [SQG]([1-6]|-Sète)");
+
+			if (isDelegue || isModoAnnee || isModoClasse) {
+				addChange(map, member, role, false);
+			}
+		}
+	}
+
+	private void sendChunkedMessage(InteractionHook hook, String message) {
+		int length = message.length();
+		boolean isTooLong = length > 1900;
+
+		if (!isTooLong) {
+			hook.sendMessage(message).queue();
+		}
+
+		if (isTooLong) {
+			String[] lines = message.split("\n");
+			StringBuilder currentChunk = new StringBuilder();
+
+			for (String line : lines) {
+				boolean willOverflow = (currentChunk.length() + line.length() + 1) > 1900;
+
+				if (willOverflow) {
+					hook.sendMessage(currentChunk.toString()).queue();
+					currentChunk = new StringBuilder();
+				}
+
+				currentChunk.append(line).append("\n");
+			}
+
+			boolean hasRemaining = currentChunk.length() > 0;
+			if (hasRemaining) {
+				hook.sendMessage(currentChunk.toString()).queue();
+			}
+		}
+	}
+
 	private CompletableFuture<Void> applyGeneralChannelUpdate(Guild guild) {
 		CompletableFuture<Void> outputFuture = CompletableFuture.completedFuture(null);
 		List<net.dv8tion.jda.api.entities.channel.concrete.TextChannel> channels = guild
 				.getTextChannelsByName("🎓│général-a2", true);
 		Role a2Role = getRoleByName(guild, "Année 2");
 		Role a3Role = getRoleByName(guild, "Année 3");
+		Role publicRole = guild.getPublicRole();
 		boolean isValid = (!channels.isEmpty() && a2Role != null && a3Role != null);
 
 		if (isValid) {
@@ -157,7 +194,8 @@ public class MigrateSecondYearCommand extends AbstractCommand {
 			outputFuture = channel.getManager()
 					.setName("🎓│général-a3")
 					.putRolePermissionOverride(a3Role.getIdLong(), viewPermission, null)
-					.putRolePermissionOverride(a2Role.getIdLong(), null, viewPermission)
+					.putRolePermissionOverride(publicRole.getIdLong(), null, viewPermission)
+					.removePermissionOverride(a2Role.getIdLong())
 					.submit();
 		}
 
@@ -166,41 +204,85 @@ public class MigrateSecondYearCommand extends AbstractCommand {
 
 	private List<CompletableFuture<Void>> applyCategoryTransformations(Guild guild, String[] qGroups) {
 		List<CompletableFuture<Void>> futures = new ArrayList<>();
+		Role publicRole = guild.getPublicRole();
 
 		for (String qName : qGroups) {
 			String gName = qName.replace("Q", "G");
 			Role qRole = getRoleByName(guild, qName);
 			Role gRole = getRoleByName(guild, gName);
+			Role modoQRole = getRoleByName(guild, "Modo " + qName);
+			Role modoGRole = getRoleByName(guild, "Modo " + gName);
+
 			boolean rolesExist = (qRole != null && gRole != null);
 
 			if (rolesExist) {
 				List<Category> categories = guild.getCategoriesByName(qName, true);
 				boolean hasCategory = !categories.isEmpty();
 
+				List<Permission> viewPermission = new ArrayList<>();
+				viewPermission.add(Permission.VIEW_CHANNEL);
+
 				if (hasCategory) {
 					Category category = categories.get(0);
-					List<Permission> viewPermission = new ArrayList<>();
-					viewPermission.add(Permission.VIEW_CHANNEL);
 
-					CompletableFuture<Void> updateCatFuture = category.getManager()
+					CategoryManager manager = category.getManager()
 							.setName(gName)
+							.putRolePermissionOverride(publicRole.getIdLong(), null, viewPermission)
 							.putRolePermissionOverride(gRole.getIdLong(), viewPermission, null)
-							.putRolePermissionOverride(qRole.getIdLong(), null, viewPermission)
-							.submit();
+							.removePermissionOverride(qRole.getIdLong());
+
+					boolean hasModoGRole = (modoGRole != null);
+					if (hasModoGRole) {
+						manager = manager.putRolePermissionOverride(modoGRole.getIdLong(), viewPermission, null);
+					}
+
+					boolean hasModoQRole = (modoQRole != null);
+					if (hasModoQRole) {
+						manager = manager.removePermissionOverride(modoQRole.getIdLong());
+					}
+
+					CompletableFuture<Void> updateCatFuture = manager.submit().thenCompose(ignored -> {
+						List<CompletableFuture<Void>> syncFutures = new ArrayList<>();
+
+						for (GuildChannel channel : category.getChannels()) {
+							String oldName = channel.getName();
+							String newName = oldName.replace(qName.toLowerCase(), gName.toLowerCase());
+							boolean isCategorizable = (channel instanceof ICategorizableChannel);
+							CompletableFuture<Void> channelFuture = null;
+
+							if (isCategorizable) {
+								ICategorizableChannel catChannel = (ICategorizableChannel) channel;
+								channelFuture = catChannel.getManager().setName(newName).sync().submit();
+							} else {
+								channelFuture = channel.getManager().setName(newName).submit();
+							}
+
+							syncFutures.add(channelFuture);
+						}
+
+						return CompletableFuture.allOf(syncFutures.toArray(new CompletableFuture[0]));
+					});
 
 					futures.add(updateCatFuture);
 
-					CompletableFuture<Void> createNewCatFuture = guild.createCategory(qName)
-							.submit()
-							.thenCompose(newCat -> {
-								String prefix = qName.toLowerCase() + "\u2502";
-								CompletableFuture<?> annonces = newCat.createTextChannel(prefix + "annonces").submit();
-								CompletableFuture<?> general = newCat.createTextChannel(prefix + "général").submit();
-								CompletableFuture<?> devoirs = newCat.createTextChannel(prefix + "devoirs").submit();
-								CompletableFuture<?> vocal = newCat.createVoiceChannel(prefix + "vocal").submit();
+					ChannelAction<Category> createAction = guild.createCategory(qName)
+							.addRolePermissionOverride(publicRole.getIdLong(), null, viewPermission)
+							.addRolePermissionOverride(qRole.getIdLong(), viewPermission, null);
 
-								return CompletableFuture.allOf(annonces, general, devoirs, vocal);
-							});
+					if (hasModoQRole) {
+						createAction = createAction.addRolePermissionOverride(modoQRole.getIdLong(), viewPermission,
+								null);
+					}
+
+					CompletableFuture<Void> createNewCatFuture = createAction.submit().thenCompose(newCat -> {
+						String prefix = qName.toLowerCase() + "\u2502";
+						CompletableFuture<?> annonces = newCat.createTextChannel(prefix + "annonces").submit();
+						CompletableFuture<?> general = newCat.createTextChannel(prefix + "général").submit();
+						CompletableFuture<?> devoirs = newCat.createTextChannel(prefix + "devoirs").submit();
+						CompletableFuture<?> vocal = newCat.createVoiceChannel(prefix + "vocal").submit();
+
+						return CompletableFuture.allOf(annonces, general, devoirs, vocal);
+					});
 
 					futures.add(createNewCatFuture);
 				}
@@ -234,9 +316,7 @@ public class MigrateSecondYearCommand extends AbstractCommand {
 
 			if (isAdd) {
 				changes.addRole(role);
-			}
-
-			if (!isAdd) {
+			} else {
 				changes.removeRole(role);
 			}
 		}
