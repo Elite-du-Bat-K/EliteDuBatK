@@ -1,6 +1,6 @@
 package fr.umontpellier.iut.discordbot.events.messages;
 
-import java.time.ZoneOffset;
+import java.time.Instant;
 
 import javax.annotation.Nonnull;
 
@@ -33,11 +33,14 @@ public class MessageUpdateListener extends AbstractEventListener {
 		if (isValidSource) {
 			Message msg = event.getMessage();
 			String newContent = msg.getContentRaw();
+			long messageId = msg.getIdLong();
+			long channelId = msg.getChannel().getIdLong();
+			long authorId = msg.getAuthor().getIdLong();
+			long timestamp = msg.getTimeCreated().toInstant().toEpochMilli();
 
-			CachedMessage previous = getBot().getCachedMessages().put(event.getMessageId(), new CachedMessage(
-					event.getAuthor().getId(),
-					newContent,
-					msg.getTimeCreated().atZoneSameInstant(ZoneOffset.UTC)));
+			CachedMessage previous = getBot().getMessageCacheService().getMessage(messageId);
+			CachedMessage updated = new CachedMessage(messageId, channelId, authorId, newContent, timestamp);
+			getBot().getMessageCacheService().cacheMessage(updated);
 
 			boolean hasContentChanged = false;
 
@@ -64,8 +67,7 @@ public class MessageUpdateListener extends AbstractEventListener {
 						before,
 						quote(newContent));
 
-				logger.info("Message {} from {} edited in \"{}\"", event.getMessageId(), event.getAuthor().getId(),
-						event.getChannel().getName());
+				logger.info("Message {} from {} edited in \"{}\"", messageId, authorId, event.getChannel().getName());
 				getBot().getLogSender().sendLog(SystemChannel.MESSAGE_EDIT_CHANNEL, "# ✏️ Message modifié", 0xFFFF00,
 						details);
 			}

@@ -1,7 +1,5 @@
 package fr.umontpellier.iut.discordbot.events.messages;
 
-import java.time.ZoneOffset;
-
 import fr.umontpellier.iut.discordbot.Bot;
 import fr.umontpellier.iut.discordbot.lib.AbstractEventListener;
 import fr.umontpellier.iut.discordbot.lib.CachedMessage;
@@ -15,16 +13,24 @@ public class MessageReceivedListener extends AbstractEventListener {
 
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
-		if (!event.isFromGuild() || event.getAuthor().isBot()) {
-			return;
+		boolean isValidSource = false;
+
+		if (event.isFromGuild()) {
+			if (!event.getAuthor().isBot()) {
+				isValidSource = true;
+			}
 		}
 
-		Message msg = event.getMessage();
+		if (isValidSource) {
+			Message msg = event.getMessage();
+			long messageId = msg.getIdLong();
+			long channelId = msg.getChannel().getIdLong();
+			long authorId = msg.getAuthor().getIdLong();
+			String content = msg.getContentRaw();
+			long timestamp = msg.getTimeCreated().toInstant().toEpochMilli();
 
-		getBot().getCachedMessages().put(event.getMessageId(), new CachedMessage(
-				event.getAuthor().getId(),
-				msg.getContentRaw(),
-				msg.getTimeCreated().atZoneSameInstant(ZoneOffset.UTC)
-		));
+			CachedMessage cachedMessage = new CachedMessage(messageId, channelId, authorId, content, timestamp);
+			getBot().getMessageCacheService().cacheMessage(cachedMessage);
+		}
 	}
 }
