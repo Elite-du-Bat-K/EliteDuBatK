@@ -1,17 +1,17 @@
-package fr.umontpellier.iut.discordbot.lib;
+package fr.umontpellier.iut.discordbot.database.dataobjects;
 
-public class CachedMessage {
+public class CachedMessageData extends AbstractDataObject {
 	private final long messageId;
 	private final long channelId;
 	private final long authorId;
 	private final String content;
 	private final long timestamp;
 
-	public CachedMessage(long messageId, long channelId, long authorId, String messageContent, long timestamp) {
+	public CachedMessageData(long messageId, long channelId, long authorId, String content, long timestamp) {
 		this.messageId = messageId;
 		this.channelId = channelId;
 		this.authorId = authorId;
-		this.content = messageContent != null ? messageContent : "";
+		this.content = content != null ? content : "";
 		this.timestamp = timestamp;
 	}
 
