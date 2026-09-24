@@ -4,9 +4,8 @@ import fr.umontpellier.iut.discordbot.commands.CommandManager;
 import fr.umontpellier.iut.discordbot.config.ConfigLoader;
 import fr.umontpellier.iut.discordbot.database.RepositoryFactory;
 import fr.umontpellier.iut.discordbot.events.EventManager;
-import fr.umontpellier.iut.discordbot.lib.BoundedCache;
-import fr.umontpellier.iut.discordbot.lib.CachedMessage;
 import fr.umontpellier.iut.discordbot.services.LogSender;
+import fr.umontpellier.iut.discordbot.services.MessageCacheService;
 import fr.umontpellier.iut.discordbot.studysuite.StudySuiteClient;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -18,13 +17,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public class Bot implements Runnable {
-	private static final Logger logger = LoggerFactory.getLogger(Bot.class);
-	private static final int MAX_CACHED_MESSAGES = 10_000;
+	private static final Logger LOGGER = LoggerFactory.getLogger(Bot.class);
+	private static final int MAX_CACHED_MESSAGES = 10000;
 
 	@NotNull
 	private final ConfigLoader config;
@@ -41,22 +38,24 @@ public class Bot implements Runnable {
 	private final StudySuiteClient studySuite;
 
 	@NotNull
-	private final Map<String, CachedMessage> cachedMessages;
+	private final MessageCacheService messageCacheService;
 
 	public Bot() throws SQLException {
 		config = new ConfigLoader();
 		repositories = new RepositoryFactory(this);
 		commands = new CommandManager(this);
 		events = new EventManager(this);
-		cachedMessages = Collections.synchronizedMap(new BoundedCache<>(MAX_CACHED_MESSAGES));
 		logSender = new LogSender(this);
 		studySuite = new StudySuiteClient(config.get().getStudySuite());
+
+		messageCacheService = new MessageCacheService(repositories.getCachedMessageRepository(), MAX_CACHED_MESSAGES);
+		messageCacheService.initialize();
 
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			try {
 				repositories.close();
 			} catch (SQLException e) {
-				logger.error("Failed to close database connection", e);
+				LOGGER.error("Failed to close database connection", e);
 			}
 		}));
 	}
@@ -85,8 +84,8 @@ public class Bot implements Runnable {
 	}
 
 	@NotNull
-	public Map<String, CachedMessage> getCachedMessages() {
-		return cachedMessages;
+	public MessageCacheService getMessageCacheService() {
+		return messageCacheService;
 	}
 
 	public LogSender getLogSender() {
@@ -100,14 +99,15 @@ public class Bot implements Runnable {
 
 	@Override
 	public void run() {
-		// Les listeners sont ajoutés avant build() pour ne rater aucun événement (dont ReadyEvent,
-		// qui enregistre les commandes)
-		JDABuilder builder = JDABuilder.createLight(config.get().getToken(), List.of(GatewayIntent.GUILD_VOICE_STATES, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MODERATION))
-				.enableCache(CacheFlag.VOICE_STATE)
-				// Sinon JDA découpe les suppressions en masse en MessageDeleteEvent individuels
+		JDABuilder builder = JDABuilder.createLight(config.get().getToken(), List.of(
+				GatewayIntent.GUILD_VOICE_STATES,
+				GatewayIntent.GUILD_MESSAGES,
+				GatewayIntent.MESSAGE_CONTENT,
+				GatewayIntent.GUILD_MEMBERS,
+				GatewayIntent.GUILD_MODERATION)).enableCache(CacheFlag.VOICE_STATE)
 				.setBulkDeleteSplittingEnabled(false);
-		events.registerEvents(builder);
 
+		events.registerEvents(builder);
 		this.jda = builder.build();
 	}
 }
