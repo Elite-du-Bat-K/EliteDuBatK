@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 public class PollChoiceRepository extends AbstractRepository<PollChoiceRepository.PollChoice> {
 
@@ -20,7 +21,7 @@ public class PollChoiceRepository extends AbstractRepository<PollChoiceRepositor
 
 	@Override
 	protected List<String> columns() {
-		return Arrays.asList("id", "poll_id", "choice_text", "votes_count");
+		return Arrays.asList("id", "poll_id", "local_index", "choice_text", "votes_count");
 	}
 
 	@Override
@@ -38,6 +39,7 @@ public class PollChoiceRepository extends AbstractRepository<PollChoiceRepositor
 		return new PollChoice(
 				resultSet.getLong("id"),
 				resultSet.getLong("poll_id"),
+				resultSet.getLong("local_index"),
 				resultSet.getString("choice_text"),
 				resultSet.getLong("votes_count"));
 	}
@@ -47,6 +49,7 @@ public class PollChoiceRepository extends AbstractRepository<PollChoiceRepositor
 		return Arrays.asList(
 				dataObject.getId(),
 				dataObject.getPollId(),
+				dataObject.getLocalIndex(),
 				dataObject.getChoiceText(),
 				dataObject.getVotesCount());
 	}
@@ -58,15 +61,27 @@ public class PollChoiceRepository extends AbstractRepository<PollChoiceRepositor
 				this::resultSetToDataObject);
 	}
 
+	public Optional<PollChoice> findByPollIdAndLocalIndex(long pollId, long localIndex) {
+		return this.queryOne(
+				"SELECT * FROM poll_choices WHERE poll_id = ? AND local_index = ? LIMIT 1",
+				statement -> {
+					statement.setLong(1, pollId);
+					statement.setLong(2, localIndex);
+				},
+				this::resultSetToDataObject);
+	}
+
 	public static class PollChoice extends AbstractDataObject {
 		private final long id;
 		private final long pollId;
+		private final long localIndex;
 		private final String choiceText;
 		private final long votesCount;
 
-		public PollChoice(long id, long pollId, String choiceText, long votesCount) {
+		public PollChoice(long id, long pollId, long localIndex, String choiceText, long votesCount) {
 			this.id = id;
 			this.pollId = pollId;
+			this.localIndex = localIndex;
 			this.choiceText = choiceText;
 			this.votesCount = votesCount;
 		}
@@ -77,6 +92,10 @@ public class PollChoiceRepository extends AbstractRepository<PollChoiceRepositor
 
 		public long getPollId() {
 			return this.pollId;
+		}
+
+		public long getLocalIndex() {
+			return this.localIndex;
 		}
 
 		public String getChoiceText() {

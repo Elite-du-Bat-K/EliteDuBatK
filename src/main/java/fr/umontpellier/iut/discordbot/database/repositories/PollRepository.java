@@ -17,17 +17,37 @@ public class PollRepository extends AbstractRepository<PollRepository.Poll> {
 
 	private void initializeTables() {
 		String createPolls = "CREATE TABLE IF NOT EXISTS polls (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, is_open INTEGER NOT NULL, creator_id TEXT NOT NULL)";
-		String createChoices = "CREATE TABLE IF NOT EXISTS poll_choices (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL, choice_text TEXT NOT NULL, votes_count INTEGER NOT NULL)";
+		String createChoices = "CREATE TABLE IF NOT EXISTS poll_choices (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL, local_index INTEGER NOT NULL DEFAULT 0, choice_text TEXT NOT NULL, votes_count INTEGER NOT NULL)";
 		String createVoters = "CREATE TABLE IF NOT EXISTS poll_voters (poll_id INTEGER NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (poll_id, user_id))";
 		String createComments = "CREATE TABLE IF NOT EXISTS poll_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL, user_id TEXT, comment_text TEXT NOT NULL, is_anonymous INTEGER NOT NULL)";
 
-		boolean success = false;
+		String checkPragma = "PRAGMA table_info(poll_choices)";
+		String alterTable = "ALTER TABLE poll_choices ADD COLUMN local_index INTEGER NOT NULL DEFAULT 0";
+		String updateIndex = "UPDATE poll_choices SET local_index = (SELECT COUNT(*) FROM poll_choices p2 WHERE p2.poll_id = poll_choices.poll_id AND p2.id <= poll_choices.id)";
+
 		try (Statement stmt = this.db.getStatement()) {
 			stmt.execute(createPolls);
 			stmt.execute(createChoices);
 			stmt.execute(createVoters);
 			stmt.execute(createComments);
-			success = true;
+
+			boolean hasLocalIndex = false;
+			try (ResultSet rs = stmt.executeQuery(checkPragma)) {
+				boolean hasNext = rs.next();
+				while (hasNext) {
+					String colName = rs.getString("name");
+					boolean isLocalIndex = "local_index".equals(colName);
+					if (isLocalIndex) {
+						hasLocalIndex = true;
+					}
+					hasNext = rs.next();
+				}
+			}
+
+			if (!hasLocalIndex) {
+				stmt.execute(alterTable);
+				stmt.execute(updateIndex);
+			}
 		} catch (SQLException e) {
 			throw new RuntimeException(e);
 		}
