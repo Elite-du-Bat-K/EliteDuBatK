@@ -385,11 +385,13 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 						boolean isMemberPresent = m != null;
 						if (isMemberPresent) {
 							identity = m.getEffectiveName();
-						} else {
-							try {
-								identity = event.getJDA().retrieveUserById(v.getUserId()).complete().getName();
-							} catch (Exception ignored) {
-							}
+						}
+					}
+					boolean identityIsStillId = identity.equals(v.getUserId());
+					if (identityIsStillId) {
+						try {
+							identity = event.getJDA().retrieveUserById(v.getUserId()).complete().getEffectiveName();
+						} catch (Exception ignored) {
 						}
 					}
 					csvBuilder.append("\"").append(identity.replace("\"", "\"\"")).append("\"\n");
@@ -483,11 +485,13 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 							boolean isMemberPresent = m != null;
 							if (isMemberPresent) {
 								identity = m.getEffectiveName();
-							} else {
-								try {
-									identity = event.getJDA().retrieveUserById(c.getUserId()).complete().getName();
-								} catch (Exception ignored) {
-								}
+							}
+						}
+						boolean identityIsStillId = identity.equals(c.getUserId());
+						if (identityIsStillId) {
+							try {
+								identity = event.getJDA().retrieveUserById(c.getUserId()).complete().getEffectiveName();
+							} catch (Exception ignored) {
 							}
 						}
 					}
