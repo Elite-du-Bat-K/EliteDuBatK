@@ -54,6 +54,16 @@ public class PollChoiceRepository extends AbstractRepository<PollChoiceRepositor
 				dataObject.getVotesCount());
 	}
 
+	public boolean incrementVote(long pollId, long localIndex) {
+		int affectedRows = this.update(
+				"UPDATE poll_choices SET votes_count = votes_count + 1 WHERE poll_id = ? AND local_index = ?",
+				statement -> {
+					statement.setLong(1, pollId);
+					statement.setLong(2, localIndex);
+				});
+		return affectedRows > 0;
+	}
+
 	public List<PollChoice> findByPollId(long pollId) {
 		return this.query(
 				"SELECT * FROM poll_choices WHERE poll_id = ?",

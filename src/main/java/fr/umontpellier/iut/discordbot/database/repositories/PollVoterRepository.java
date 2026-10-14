@@ -58,6 +58,16 @@ public class PollVoterRepository extends AbstractRepository<PollVoterRepository.
 				});
 	}
 
+	public boolean recordVoteAttempt(long pollId, String userId) {
+		int affectedRows = this.update(
+				"INSERT OR IGNORE INTO poll_voters (poll_id, user_id) VALUES (?, ?)",
+				statement -> {
+					statement.setLong(1, pollId);
+					statement.setString(2, userId);
+				});
+		return affectedRows > 0;
+	}
+
 	public boolean hasVoted(long pollId, String userId) {
 		boolean hasVotedStatus = false;
 		Optional<PollVoter> record = this.queryOne(

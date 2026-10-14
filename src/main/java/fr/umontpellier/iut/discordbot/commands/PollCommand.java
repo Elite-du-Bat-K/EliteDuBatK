@@ -240,25 +240,20 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			boolean isOpen = poll.isOpen();
 
 			if (isOpen) {
-				boolean hasVoted = voterRepo.hasVoted(pollId, userId);
+				Optional<PollChoiceRepository.PollChoice> choiceOpt = choiceRepo.findByPollIdAndLocalIndex(pollId,
+						choiceIndex);
+				boolean isChoicePresent = choiceOpt.isPresent();
 
-				if (!hasVoted) {
-					Optional<PollChoiceRepository.PollChoice> choiceOpt = choiceRepo.findByPollIdAndLocalIndex(pollId,
-							choiceIndex);
-					boolean isChoicePresent = choiceOpt.isPresent();
-
-					if (isChoicePresent) {
-						PollChoiceRepository.PollChoice c = choiceOpt.get();
-						PollChoiceRepository.PollChoice updatedChoice = new PollChoiceRepository.PollChoice(c.getId(),
-								c.getPollId(), c.getLocalIndex(), c.getChoiceText(), c.getVotesCount() + 1);
-						choiceRepo.update(updatedChoice);
-						voterRepo.insert(new PollVoterRepository.PollVoter(pollId, userId));
+				if (isChoicePresent) {
+					boolean voteRegistered = voterRepo.recordVoteAttempt(pollId, userId);
+					if (voteRegistered) {
+						choiceRepo.incrementVote(pollId, choiceIndex);
 						responseMessage = "Vote recorded.";
 					} else {
-						responseMessage = "Choice not found.";
+						responseMessage = "You have already voted on this poll.";
 					}
 				} else {
-					responseMessage = "You have already voted on this poll.";
+					responseMessage = "Choice not found.";
 				}
 			} else {
 				responseMessage = "This poll is closed.";
@@ -283,20 +278,29 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		boolean isPresent = pollOpt.isPresent();
 
 		if (isPresent) {
-			List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
-			List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
+			PollRepository.Poll poll = pollOpt.get();
+			boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
+			boolean isAdmin = this.isAdmin(event.getMember());
+			boolean hasPermission = isCreator || isAdmin;
 
-			StringBuilder sb = new StringBuilder();
-			sb.append("**").append(pollOpt.get().getTitle()).append("**\n");
-			sb.append("Total votes: ").append(voters.size()).append("\n\n");
+			if (hasPermission) {
+				List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
+				List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
 
-			for (PollChoiceRepository.PollChoice c : choices) {
-				sb.append(c.getLocalIndex()).append(" - ").append(c.getChoiceText()).append(": ")
-						.append(c.getVotesCount()).append(" votes\n");
+				StringBuilder sb = new StringBuilder();
+				sb.append("**").append(poll.getTitle()).append("**\n");
+				sb.append("Total votes: ").append(voters.size()).append("\n\n");
+
+				for (PollChoiceRepository.PollChoice c : choices) {
+					sb.append(c.getLocalIndex()).append(" - ").append(c.getChoiceText()).append(": ")
+							.append(c.getVotesCount()).append(" votes\n");
+				}
+
+				responseMessage = sb.toString();
+				ephemeral = false;
+			} else {
+				responseMessage = "You do not have permission to view these results.";
 			}
-
-			responseMessage = sb.toString();
-			ephemeral = false;
 		} else {
 			responseMessage = "Poll not found.";
 		}
@@ -318,27 +322,47 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		boolean isPresent = pollOpt.isPresent();
 
 		if (isPresent) {
-			List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
-			List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
+			PollRepository.Poll poll = pollOpt.get();
+			boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
+			boolean isAdmin = this.isAdmin(event.getMember());
+			boolean hasPermission = isCreator || isAdmin;
 
-			StringBuilder csvBuilder = new StringBuilder();
-			csvBuilder.append("Total Votes: ").append(voters.size()).append("\n");
-			csvBuilder.append("Local Index,Choice Text,Votes\n");
+			if (hasPermission) {
+				List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
+				List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
 
-			for (PollChoiceRepository.PollChoice c : choices) {
-				csvBuilder.append(c.getLocalIndex()).append(",")
-						.append("\"").append(c.getChoiceText().replace("\"", "\"\"")).append("\",")
-						.append(c.getVotesCount()).append("\n");
+				StringBuilder csvBuilder = new StringBuilder();
+				csvBuilder.append("Total Votes: ").append(voters.size()).append("\n");
+				csvBuilder.append("Local Index,Choice Text,Votes\n");
+
+				for (PollChoiceRepository.PollChoice c : choices) {
+					csvBuilder.append(c.getLocalIndex()).append(",")
+							.append("\"").append(c.getChoiceText().replace("\"", "\"\"")).append("\",")
+							.append(c.getVotesCount()).append("\n");
+				}
+
+				csvBuilder.append("\nUsers who voted:\n");
+				Guild guild = event.getGuild();
+
+				for (PollVoterRepository.PollVoter v : voters) {
+					String identity = v.getUserId();
+					boolean hasGuild = guild != null;
+					if (hasGuild) {
+						Member m = guild.getMemberById(v.getUserId());
+						boolean hasMember = m != null;
+						if (hasMember) {
+							identity = m.getEffectiveName();
+						}
+					}
+					csvBuilder.append("\"").append(identity.replace("\"", "\"\"")).append("\"\n");
+				}
+
+				byte[] bytes = csvBuilder.toString().getBytes(StandardCharsets.UTF_8);
+				uploadData = FileUpload.fromData(bytes, "poll_" + pollId + "_export.csv");
+				success = true;
+			} else {
+				errorMessage = "You do not have permission to export this poll.";
 			}
-
-			csvBuilder.append("\nUsers who voted:\n");
-			for (PollVoterRepository.PollVoter v : voters) {
-				csvBuilder.append(v.getUserId()).append("\n");
-			}
-
-			byte[] bytes = csvBuilder.toString().getBytes(StandardCharsets.UTF_8);
-			uploadData = FileUpload.fromData(bytes, "poll_" + pollId + "_export.csv");
-			success = true;
 		} else {
 			errorMessage = "Poll not found.";
 		}
@@ -390,38 +414,47 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		boolean isPresent = pollOpt.isPresent();
 
 		if (isPresent) {
-			PollCommentRepository commentRepo = this.getBot().getRepositories()
-					.getRepository(PollCommentRepository.class);
-			List<PollCommentRepository.PollComment> comments = commentRepo.findByPollId(pollId);
+			PollRepository.Poll poll = pollOpt.get();
+			boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
+			boolean isAdmin = this.isAdmin(event.getMember());
+			boolean hasPermission = isCreator || isAdmin;
 
-			Guild guild = event.getGuild();
-			StringBuilder csvBuilder = new StringBuilder();
-			csvBuilder.append("User,Comment\n");
+			if (hasPermission) {
+				PollCommentRepository commentRepo = this.getBot().getRepositories()
+						.getRepository(PollCommentRepository.class);
+				List<PollCommentRepository.PollComment> comments = commentRepo.findByPollId(pollId);
 
-			for (PollCommentRepository.PollComment c : comments) {
-				String identity = "Anonyme";
-				boolean isNotAnonymous = !c.isAnonymous() && c.getUserId() != null;
+				Guild guild = event.getGuild();
+				StringBuilder csvBuilder = new StringBuilder();
+				csvBuilder.append("User,Comment\n");
 
-				if (isNotAnonymous) {
-					identity = c.getUserId();
-					boolean hasGuild = guild != null;
-					if (hasGuild) {
-						Member m = guild.getMemberById(c.getUserId());
-						boolean hasMember = m != null;
-						if (hasMember) {
-							identity = m.getEffectiveName();
+				for (PollCommentRepository.PollComment c : comments) {
+					String identity = "Anonyme";
+					boolean isNotAnonymous = !c.isAnonymous() && c.getUserId() != null;
+
+					if (isNotAnonymous) {
+						identity = c.getUserId();
+						boolean hasGuild = guild != null;
+						if (hasGuild) {
+							Member m = guild.getMemberById(c.getUserId());
+							boolean hasMember = m != null;
+							if (hasMember) {
+								identity = m.getEffectiveName();
+							}
 						}
 					}
+
+					String safeComment = "\"" + c.getCommentText().replace("\"", "\"\"") + "\"";
+					String safeIdentity = "\"" + identity.replace("\"", "\"\"") + "\"";
+					csvBuilder.append(safeIdentity).append(",").append(safeComment).append("\n");
 				}
 
-				String safeComment = "\"" + c.getCommentText().replace("\"", "\"\"") + "\"";
-				String safeIdentity = "\"" + identity.replace("\"", "\"\"") + "\"";
-				csvBuilder.append(safeIdentity).append(",").append(safeComment).append("\n");
+				byte[] bytes = csvBuilder.toString().getBytes(StandardCharsets.UTF_8);
+				uploadData = FileUpload.fromData(bytes, "poll_" + pollId + "_comments.csv");
+				success = true;
+			} else {
+				errorMessage = "You do not have permission to export comments for this poll.";
 			}
-
-			byte[] bytes = csvBuilder.toString().getBytes(StandardCharsets.UTF_8);
-			uploadData = FileUpload.fromData(bytes, "poll_" + pollId + "_comments.csv");
-			success = true;
 		} else {
 			errorMessage = "Poll not found.";
 		}
