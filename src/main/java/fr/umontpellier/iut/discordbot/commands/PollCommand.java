@@ -391,7 +391,14 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 							}
 						}
 						boolean identityIsStillId = identity.equals(v.getUserId());
-						if (identityIsStillId) {
+						if (identityIsStillId && hasGuild) {
+							try {
+								identity = guild.retrieveMemberById(v.getUserId()).complete().getEffectiveName();
+							} catch (Exception ignored) {
+							}
+						}
+						boolean identityIsStillIdAfterMember = identity.equals(v.getUserId());
+						if (identityIsStillIdAfterMember) {
 							try {
 								identity = event.getJDA().retrieveUserById(v.getUserId()).complete().getName();
 							} catch (Exception ignored) {
@@ -495,7 +502,14 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 								}
 							}
 							boolean identityIsStillId = identity.equals(c.getUserId());
-							if (identityIsStillId) {
+							if (identityIsStillId && hasGuild) {
+								try {
+									identity = guild.retrieveMemberById(c.getUserId()).complete().getEffectiveName();
+								} catch (Exception ignored) {
+								}
+							}
+							boolean identityIsStillIdAfterMember = identity.equals(c.getUserId());
+							if (identityIsStillIdAfterMember) {
 								try {
 									identity = event.getJDA().retrieveUserById(c.getUserId()).complete().getName();
 								} catch (Exception ignored) {
