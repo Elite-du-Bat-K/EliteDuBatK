@@ -1,0 +1,352 @@
+package fr.umontpellier.iut.discordbot.commands;
+
+import fr.umontpellier.iut.discordbot.Bot;
+import fr.umontpellier.iut.discordbot.database.repositories.PollChoiceRepository;
+import fr.umontpellier.iut.discordbot.database.repositories.PollCommentRepository;
+import fr.umontpellier.iut.discordbot.database.repositories.PollRepository;
+import fr.umontpellier.iut.discordbot.database.repositories.PollVoterRepository;
+import fr.umontpellier.iut.discordbot.lib.AbstractCommand;
+import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
+import net.dv8tion.jda.api.utils.FileUpload;
+import org.jetbrains.annotations.NotNull;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+public class PollCommand extends AbstractCommand {
+
+	public PollCommand(Bot bot) {
+		super(bot);
+	}
+
+	@NotNull
+	@Override
+	public SlashCommandData getCommandInformation() {
+		SubcommandData createData = new SubcommandData("create", "Create a new poll")
+				.addOption(OptionType.STRING, "title", "Poll title", true)
+				.addOption(OptionType.STRING, "description", "Poll description", true)
+				.addOption(OptionType.STRING, "choices", "Choices separated by | (e.g. Yes|No|Maybe)", true);
+
+		SubcommandData closeData = new SubcommandData("close", "Close a poll")
+				.addOption(OptionType.INTEGER, "id", "Poll ID", true);
+
+		SubcommandData voteData = new SubcommandData("vote", "Vote on a poll")
+				.addOption(OptionType.INTEGER, "poll_id", "Poll ID", true)
+				.addOption(OptionType.INTEGER, "choice_id", "Choice ID", true);
+
+		SubcommandData resultsData = new SubcommandData("results", "View poll results")
+				.addOption(OptionType.INTEGER, "id", "Poll ID", true);
+
+		SubcommandData exportResultsData = new SubcommandData("export", "Export poll results")
+				.addOption(OptionType.INTEGER, "id", "Poll ID", true);
+
+		SubcommandData commentData = new SubcommandData("comment", "Add a comment")
+				.addOption(OptionType.INTEGER, "id", "Poll ID", true)
+				.addOption(OptionType.STRING, "text", "Comment text", true)
+				.addOption(OptionType.BOOLEAN, "anonymous", "Hide your identity", true);
+
+		SubcommandData exportCommentsData = new SubcommandData("export_comments", "Export all comments")
+				.addOption(OptionType.INTEGER, "id", "Poll ID", true);
+
+		return Commands.slash("poll", "Manage polls")
+				.addSubcommands(createData, closeData, voteData, resultsData, exportResultsData, commentData,
+						exportCommentsData)
+				.setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.USE_APPLICATION_COMMANDS));
+	}
+
+	@Override
+	public void execute(SlashCommandInteractionEvent event) {
+		String subName = event.getSubcommandName();
+		boolean hasSubName = (subName != null);
+
+		if (hasSubName) {
+			boolean isCreate = subName.equals("create");
+			boolean isClose = subName.equals("close");
+			boolean isVote = subName.equals("vote");
+			boolean isResults = subName.equals("results");
+			boolean isExport = subName.equals("export");
+			boolean isComment = subName.equals("comment");
+			boolean isExportComments = subName.equals("export_comments");
+
+			if (isCreate) {
+				this.handleCreate(event);
+			} else if (isClose) {
+				this.handleClose(event);
+			} else if (isVote) {
+				this.handleVote(event);
+			} else if (isResults) {
+				this.handleResults(event);
+			} else if (isExport) {
+				this.handleExport(event);
+			} else if (isComment) {
+				this.handleComment(event);
+			} else if (isExportComments) {
+				this.handleExportComments(event);
+			} else {
+				event.reply("Unknown subcommand.").setEphemeral(true).queue();
+			}
+		} else {
+			event.reply("No subcommand provided.").setEphemeral(true).queue();
+		}
+	}
+
+	private void handleCreate(SlashCommandInteractionEvent event) {
+		String title = Objects.requireNonNull(event.getOption("title")).getAsString();
+		String description = Objects.requireNonNull(event.getOption("description")).getAsString();
+		String choicesRaw = Objects.requireNonNull(event.getOption("choices")).getAsString();
+
+		String[] choices = choicesRaw.split("\\|");
+		boolean hasValidChoices = choices.length >= 2;
+
+		if (hasValidChoices) {
+			PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+			PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
+
+			PollRepository.Poll newPoll = new PollRepository.Poll(0, title, description, true, event.getUser().getId());
+			pollRepo.insert(newPoll);
+
+			long pollId = 0L;
+			List<PollRepository.Poll> allPolls = pollRepo.findAll();
+			long latestId = 0L;
+			for (PollRepository.Poll p : allPolls) {
+				boolean isLater = p.getId() > latestId;
+				if (isLater) {
+					latestId = p.getId();
+				}
+			}
+			pollId = latestId;
+
+			for (String c : choices) {
+				String cleanChoice = c.trim();
+				boolean isNotEmpty = !cleanChoice.isEmpty();
+				if (isNotEmpty) {
+					choiceRepo.insert(new PollChoiceRepository.PollChoice(0, pollId, cleanChoice, 0));
+				}
+			}
+
+			event.reply("Poll created successfully with ID " + pollId).queue();
+		} else {
+			event.reply("You must provide at least two choices separated by |").setEphemeral(true).queue();
+		}
+	}
+
+	private void handleClose(SlashCommandInteractionEvent event) {
+		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
+		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
+
+		boolean isPresent = pollOpt.isPresent();
+		if (isPresent) {
+			PollRepository.Poll p = pollOpt.get();
+			boolean isCreator = p.getCreatorId().equals(event.getUser().getId());
+			boolean isAdmin = this.isAdmin(event.getMember());
+			boolean canClose = isCreator || isAdmin;
+
+			if (canClose) {
+				PollRepository.Poll updatedPoll = new PollRepository.Poll(p.getId(), p.getTitle(), p.getDescription(),
+						false, p.getCreatorId());
+				pollRepo.update(updatedPoll);
+				event.reply("Poll " + pollId + " has been closed.").queue();
+			} else {
+				event.reply("You do not have permission to close this poll.").setEphemeral(true).queue();
+			}
+		} else {
+			event.reply("Poll not found.").setEphemeral(true).queue();
+		}
+	}
+
+	private void handleVote(SlashCommandInteractionEvent event) {
+		long pollId = Objects.requireNonNull(event.getOption("poll_id")).getAsLong();
+		long choiceId = Objects.requireNonNull(event.getOption("choice_id")).getAsLong();
+		String userId = event.getUser().getId();
+
+		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
+		PollVoterRepository voterRepo = this.getBot().getRepositories().getRepository(PollVoterRepository.class);
+
+		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
+		boolean isPollPresent = pollOpt.isPresent();
+
+		if (isPollPresent) {
+			PollRepository.Poll poll = pollOpt.get();
+			boolean isOpen = poll.isOpen();
+
+			if (isOpen) {
+				boolean hasVoted = voterRepo.hasVoted(pollId, userId);
+
+				if (!hasVoted) {
+					Optional<PollChoiceRepository.PollChoice> choiceOpt = choiceRepo.findByPrimaryKey(choiceId);
+					boolean isChoicePresent = choiceOpt.isPresent();
+
+					if (isChoicePresent) {
+						PollChoiceRepository.PollChoice c = choiceOpt.get();
+						boolean isCorrectPoll = c.getPollId() == pollId;
+
+						if (isCorrectPoll) {
+							PollChoiceRepository.PollChoice updatedChoice = new PollChoiceRepository.PollChoice(
+									c.getId(), c.getPollId(), c.getChoiceText(), c.getVotesCount() + 1);
+							choiceRepo.update(updatedChoice);
+							voterRepo.insert(new PollVoterRepository.PollVoter(pollId, userId));
+							event.reply("Vote recorded.").setEphemeral(true).queue();
+						} else {
+							event.reply("Choice does not belong to this poll.").setEphemeral(true).queue();
+						}
+					} else {
+						event.reply("Choice not found.").setEphemeral(true).queue();
+					}
+				} else {
+					event.reply("You have already voted on this poll.").setEphemeral(true).queue();
+				}
+			} else {
+				event.reply("This poll is closed.").setEphemeral(true).queue();
+			}
+		} else {
+			event.reply("Poll not found.").setEphemeral(true).queue();
+		}
+	}
+
+	private void handleResults(SlashCommandInteractionEvent event) {
+		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
+		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
+		PollVoterRepository voterRepo = this.getBot().getRepositories().getRepository(PollVoterRepository.class);
+		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+
+		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
+		boolean isPresent = pollOpt.isPresent();
+
+		if (isPresent) {
+			List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
+			List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
+
+			StringBuilder sb = new StringBuilder();
+			sb.append("**").append(pollOpt.get().getTitle()).append("**\n");
+			sb.append("Total votes: ").append(voters.size()).append("\n\n");
+
+			for (PollChoiceRepository.PollChoice c : choices) {
+				sb.append(c.getId()).append(" - ").append(c.getChoiceText()).append(": ").append(c.getVotesCount())
+						.append(" votes\n");
+			}
+
+			event.reply(sb.toString()).queue();
+		} else {
+			event.reply("Poll not found.").setEphemeral(true).queue();
+		}
+	}
+
+	private void handleExport(SlashCommandInteractionEvent event) {
+		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
+		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
+		PollVoterRepository voterRepo = this.getBot().getRepositories().getRepository(PollVoterRepository.class);
+		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+
+		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
+		boolean isPresent = pollOpt.isPresent();
+
+		if (isPresent) {
+			List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
+			List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
+
+			StringBuilder csvBuilder = new StringBuilder();
+			csvBuilder.append("Total Votes: ").append(voters.size()).append("\n");
+			csvBuilder.append("Choice ID,Choice Text,Votes\n");
+
+			for (PollChoiceRepository.PollChoice c : choices) {
+				csvBuilder.append(c.getId()).append(",")
+						.append("\"").append(c.getChoiceText().replace("\"", "\"\"")).append("\",")
+						.append(c.getVotesCount()).append("\n");
+			}
+
+			csvBuilder.append("\nUsers who voted:\n");
+			for (PollVoterRepository.PollVoter v : voters) {
+				csvBuilder.append(v.getUserId()).append("\n");
+			}
+
+			byte[] bytes = csvBuilder.toString().getBytes(StandardCharsets.UTF_8);
+			FileUpload upload = FileUpload.fromData(bytes, "poll_" + pollId + "_export.csv");
+			event.replyFiles(upload).queue();
+		} else {
+			event.reply("Poll not found.").setEphemeral(true).queue();
+		}
+	}
+
+	private void handleComment(SlashCommandInteractionEvent event) {
+		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
+		String text = Objects.requireNonNull(event.getOption("text")).getAsString();
+		boolean anonymous = Objects.requireNonNull(event.getOption("anonymous")).getAsBoolean();
+
+		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
+		boolean isPresent = pollOpt.isPresent();
+
+		if (isPresent) {
+			String userIdParam = "";
+			if (!anonymous) {
+				userIdParam = event.getUser().getId();
+			} else {
+				userIdParam = null;
+			}
+
+			PollCommentRepository commentRepo = this.getBot().getRepositories()
+					.getRepository(PollCommentRepository.class);
+			commentRepo.insert(new PollCommentRepository.PollComment(0, pollId, userIdParam, text, anonymous));
+
+			event.reply("Comment added successfully.").setEphemeral(true).queue();
+		} else {
+			event.reply("Poll not found.").setEphemeral(true).queue();
+		}
+	}
+
+	private void handleExportComments(SlashCommandInteractionEvent event) {
+		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
+		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
+		boolean isPresent = pollOpt.isPresent();
+
+		if (isPresent) {
+			PollCommentRepository commentRepo = this.getBot().getRepositories()
+					.getRepository(PollCommentRepository.class);
+			List<PollCommentRepository.PollComment> comments = commentRepo.findByPollId(pollId);
+
+			Guild guild = event.getGuild();
+			StringBuilder csvBuilder = new StringBuilder();
+			csvBuilder.append("User,Comment\n");
+
+			for (PollCommentRepository.PollComment c : comments) {
+				String identity = "Anonyme";
+				boolean isNotAnonymous = !c.isAnonymous() && c.getUserId() != null;
+
+				if (isNotAnonymous) {
+					identity = c.getUserId();
+					boolean hasGuild = guild != null;
+					if (hasGuild) {
+						Member m = guild.getMemberById(c.getUserId());
+						boolean hasMember = m != null;
+						if (hasMember) {
+							identity = m.getEffectiveName();
+						}
+					}
+				}
+
+				String safeComment = "\"" + c.getCommentText().replace("\"", "\"\"") + "\"";
+				String safeIdentity = "\"" + identity.replace("\"", "\"\"") + "\"";
+				csvBuilder.append(safeIdentity).append(",").append(safeComment).append("\n");
+			}
+
+			byte[] bytes = csvBuilder.toString().getBytes(StandardCharsets.UTF_8);
+			FileUpload upload = FileUpload.fromData(bytes, "poll_" + pollId + "_comments.csv");
+			event.replyFiles(upload).queue();
+		} else {
+			event.reply("Poll not found.").setEphemeral(true).queue();
+		}
+	}
+}
