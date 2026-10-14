@@ -48,6 +48,16 @@ public class PollVoterRepository extends AbstractRepository<PollVoterRepository.
 				dataObject.getUserId());
 	}
 
+	@Override
+	public void insert(PollVoter dataObject) {
+		this.update(
+				"INSERT INTO poll_voters (poll_id, user_id) VALUES (?, ?)",
+				statement -> {
+					statement.setLong(1, dataObject.getPollId());
+					statement.setString(2, dataObject.getUserId());
+				});
+	}
+
 	public boolean hasVoted(long pollId, String userId) {
 		boolean hasVotedStatus = false;
 		Optional<PollVoter> record = this.queryOne(
