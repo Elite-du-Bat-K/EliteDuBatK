@@ -49,7 +49,8 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				.addOption(OptionType.INTEGER, "choice_index", "Select your choice", true, true);
 
 		SubcommandData resultsData = new SubcommandData("results", "View poll results")
-				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true);
+				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true)
+				.addOption(OptionType.BOOLEAN, "public", "Make the results visible to everyone", false);
 
 		SubcommandData exportResultsData = new SubcommandData("export", "Export poll results")
 				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true);
@@ -267,8 +268,14 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 
 	private void handleResults(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
+		OptionMapping publicOpt = event.getOption("public");
+		boolean isPublic = false;
+		if (publicOpt != null) {
+			isPublic = publicOpt.getAsBoolean();
+		}
+
 		String responseMessage = "Result retrieval failed.";
-		boolean ephemeral = true;
+		boolean ephemeralResponse = true;
 
 		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
 		PollVoterRepository voterRepo = this.getBot().getRepositories().getRepository(PollVoterRepository.class);
@@ -297,7 +304,9 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				}
 
 				responseMessage = sb.toString();
-				ephemeral = false;
+				if (isPublic) {
+					ephemeralResponse = false;
+				}
 			} else {
 				responseMessage = "You do not have permission to view these results.";
 			}
@@ -305,7 +314,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			responseMessage = "Poll not found.";
 		}
 
-		event.reply(responseMessage).setEphemeral(ephemeral).queue();
+		event.reply(responseMessage).setEphemeral(ephemeralResponse).queue();
 	}
 
 	private void handleExport(SlashCommandInteractionEvent event) {
