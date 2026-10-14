@@ -72,7 +72,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 	@Override
 	public void execute(SlashCommandInteractionEvent event) {
 		String subName = event.getSubcommandName();
-		boolean hasSubName = (subName != null);
+		boolean hasSubName = subName != null;
 
 		if (hasSubName) {
 			boolean isCreate = subName.equals("create");
@@ -205,7 +205,12 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		if (isPresent) {
 			PollRepository.Poll p = pollOpt.get();
 			boolean isCreator = p.getCreatorId().equals(event.getUser().getId());
-			boolean isAdmin = this.isAdmin(event.getMember());
+			boolean isAdmin = false;
+			Member eventMember = event.getMember();
+			boolean hasMember = eventMember != null;
+			if (hasMember) {
+				isAdmin = this.isAdmin(eventMember);
+			}
 			boolean canClose = isCreator || isAdmin;
 
 			if (canClose) {
@@ -270,7 +275,8 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		OptionMapping publicOpt = event.getOption("public");
 		boolean isPublic = false;
-		if (publicOpt != null) {
+		boolean hasPublicOpt = publicOpt != null;
+		if (hasPublicOpt) {
 			isPublic = publicOpt.getAsBoolean();
 		}
 
@@ -278,7 +284,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		boolean ephemeralResponse = true;
 
 		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
-		PollVoterRepository voterRepo = this.getBot().getRepositories().getRepository(PollVoterRepository.class);
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
@@ -287,16 +292,25 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		if (isPresent) {
 			PollRepository.Poll poll = pollOpt.get();
 			boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
-			boolean isAdmin = this.isAdmin(event.getMember());
+			boolean isAdmin = false;
+			Member eventMember = event.getMember();
+			boolean hasMember = eventMember != null;
+			if (hasMember) {
+				isAdmin = this.isAdmin(eventMember);
+			}
 			boolean hasPermission = isCreator || isAdmin;
 
 			if (hasPermission) {
 				List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
-				List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
+
+				long totalSum = 0L;
+				for (PollChoiceRepository.PollChoice c : choices) {
+					totalSum = totalSum + c.getVotesCount();
+				}
 
 				StringBuilder sb = new StringBuilder();
 				sb.append("**").append(poll.getTitle()).append("**\n");
-				sb.append("Total votes: ").append(voters.size()).append("\n\n");
+				sb.append("Total votes: ").append(totalSum).append("\n\n");
 
 				for (PollChoiceRepository.PollChoice c : choices) {
 					sb.append(c.getLocalIndex()).append(" - ").append(c.getChoiceText()).append(": ")
@@ -333,15 +347,25 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		if (isPresent) {
 			PollRepository.Poll poll = pollOpt.get();
 			boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
-			boolean isAdmin = this.isAdmin(event.getMember());
+			boolean isAdmin = false;
+			Member eventMember = event.getMember();
+			boolean hasMember = eventMember != null;
+			if (hasMember) {
+				isAdmin = this.isAdmin(eventMember);
+			}
 			boolean hasPermission = isCreator || isAdmin;
 
 			if (hasPermission) {
 				List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
 				List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
 
+				long totalSum = 0L;
+				for (PollChoiceRepository.PollChoice c : choices) {
+					totalSum = totalSum + c.getVotesCount();
+				}
+
 				StringBuilder csvBuilder = new StringBuilder();
-				csvBuilder.append("Total Votes: ").append(voters.size()).append("\n");
+				csvBuilder.append("Total Votes: ").append(totalSum).append("\n");
 				csvBuilder.append("Local Index,Choice Text,Votes\n");
 
 				for (PollChoiceRepository.PollChoice c : choices) {
@@ -352,15 +376,20 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 
 				csvBuilder.append("\nUsers who voted:\n");
 				Guild guild = event.getGuild();
+				boolean hasGuild = guild != null;
 
 				for (PollVoterRepository.PollVoter v : voters) {
 					String identity = v.getUserId();
-					boolean hasGuild = guild != null;
 					if (hasGuild) {
 						Member m = guild.getMemberById(v.getUserId());
-						boolean hasMember = m != null;
-						if (hasMember) {
+						boolean isMemberPresent = m != null;
+						if (isMemberPresent) {
 							identity = m.getEffectiveName();
+						} else {
+							try {
+								identity = event.getJDA().retrieveUserById(v.getUserId()).complete().getName();
+							} catch (Exception ignored) {
+							}
 						}
 					}
 					csvBuilder.append("\"").append(identity.replace("\"", "\"\"")).append("\"\n");
@@ -377,7 +406,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		}
 
 		if (success) {
-			event.replyFiles(uploadData).queue();
+			event.replyFiles(uploadData).setEphemeral(true).queue();
 		} else {
 			event.reply(errorMessage).setEphemeral(true).queue();
 		}
@@ -425,7 +454,12 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		if (isPresent) {
 			PollRepository.Poll poll = pollOpt.get();
 			boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
-			boolean isAdmin = this.isAdmin(event.getMember());
+			boolean isAdmin = false;
+			Member eventMember = event.getMember();
+			boolean hasMember = eventMember != null;
+			if (hasMember) {
+				isAdmin = this.isAdmin(eventMember);
+			}
 			boolean hasPermission = isCreator || isAdmin;
 
 			if (hasPermission) {
@@ -434,6 +468,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				List<PollCommentRepository.PollComment> comments = commentRepo.findByPollId(pollId);
 
 				Guild guild = event.getGuild();
+				boolean hasGuild = guild != null;
 				StringBuilder csvBuilder = new StringBuilder();
 				csvBuilder.append("User,Comment\n");
 
@@ -443,12 +478,16 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 
 					if (isNotAnonymous) {
 						identity = c.getUserId();
-						boolean hasGuild = guild != null;
 						if (hasGuild) {
 							Member m = guild.getMemberById(c.getUserId());
-							boolean hasMember = m != null;
-							if (hasMember) {
+							boolean isMemberPresent = m != null;
+							if (isMemberPresent) {
 								identity = m.getEffectiveName();
+							} else {
+								try {
+									identity = event.getJDA().retrieveUserById(c.getUserId()).complete().getName();
+								} catch (Exception ignored) {
+								}
 							}
 						}
 					}
@@ -469,7 +508,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		}
 
 		if (success) {
-			event.replyFiles(uploadData).queue();
+			event.replyFiles(uploadData).setEphemeral(true).queue();
 		} else {
 			event.reply(errorMessage).setEphemeral(true).queue();
 		}

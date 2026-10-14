@@ -55,13 +55,18 @@ public class PollChoiceRepository extends AbstractRepository<PollChoiceRepositor
 	}
 
 	public boolean incrementVote(long pollId, long localIndex) {
+		boolean voteIncremented = false;
 		int affectedRows = this.update(
 				"UPDATE poll_choices SET votes_count = votes_count + 1 WHERE poll_id = ? AND local_index = ?",
 				statement -> {
 					statement.setLong(1, pollId);
 					statement.setLong(2, localIndex);
 				});
-		return affectedRows > 0;
+		boolean isAffected = affectedRows > 0;
+		if (isAffected) {
+			voteIncremented = true;
+		}
+		return voteIncremented;
 	}
 
 	public List<PollChoice> findByPollId(long pollId) {
