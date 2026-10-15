@@ -61,6 +61,21 @@ public class PollCommentRepository extends AbstractRepository<PollCommentReposit
 				this::resultSetToDataObject);
 	}
 
+	public boolean deleteByPollId(long pollId) {
+		boolean isDeleted = false;
+
+		int affectedRows = this.update(
+				"DELETE FROM poll_comments WHERE poll_id = ?",
+				statement -> statement.setLong(1, pollId));
+		boolean hasAffected = affectedRows > 0;
+
+		if (hasAffected) {
+			isDeleted = true;
+		}
+
+		return isDeleted;
+	}
+
 	public static class PollComment extends AbstractDataObject {
 		private final long id;
 		private final long pollId;
