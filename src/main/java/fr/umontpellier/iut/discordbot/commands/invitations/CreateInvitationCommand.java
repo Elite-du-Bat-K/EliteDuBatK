@@ -135,7 +135,7 @@ public class CreateInvitationCommand extends AbstractCommand {
 						if (qrCode) {
 							try {
 								BufferedImage logo = null;
-								InputStream logoStream = getClass().getResourceAsStream("/logo.png");
+								InputStream logoStream = getClass().getResourceAsStream("/avatar.png");
 								boolean hasLogoStream = logoStream != null;
 
 								if (hasLogoStream) {
