@@ -33,7 +33,7 @@ public class CreateInvitationCommand extends AbstractCommand {
 	@Override
 	public SlashCommandData getCommandInformation() {
 		return Commands.slash("inviter", "Créer une invitation (possibilité de transmettre le lien par mp)")
-				.addOption(OptionType.CHANNEL, "channel", "Salon ciblé par l'invitation", true, true)
+				.addOption(OptionType.CHANNEL, "channel", "Salon ciblé par l'invitation", true, false)
 				.addOption(OptionType.INTEGER, "duration", "Durée de validité de l'invitation (0 pour éternelle)", true,
 						false)
 				.addOption(OptionType.INTEGER, "uselimit", "Limite d'utilisation du lien (0 pour illimité)", true,
