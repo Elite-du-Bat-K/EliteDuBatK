@@ -38,8 +38,8 @@ public class CreateInvitationCommand extends AbstractCommand {
 						false)
 				.addOption(OptionType.INTEGER, "uselimit", "Limite d'utilisation du lien (0 pour illimité)", true,
 						false)
-				.addOption(OptionType.BOOLEAN, "qrcode", "Générer un QR Code de l'invitation", true, true)
-				.addOption(OptionType.USER, "sendto", "Destinataire du lien", false, true)
+				.addOption(OptionType.BOOLEAN, "qrcode", "Générer un QR Code de l'invitation", true, false)
+				.addOption(OptionType.USER, "sendto", "Destinataire du lien", false, false)
 				.setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.CREATE_INSTANT_INVITE));
 	}
 
