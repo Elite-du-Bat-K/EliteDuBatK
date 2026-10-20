@@ -43,6 +43,9 @@ public class Bot implements Runnable {
 	public Bot() throws SQLException {
 		config = new ConfigLoader();
 		repositories = new RepositoryFactory(this);
+		repositories.vacuumDatabase();
+		LOGGER.info("Database vacuumed successfully");
+
 		commands = new CommandManager(this);
 		events = new EventManager(this);
 		logSender = new LogSender(this);

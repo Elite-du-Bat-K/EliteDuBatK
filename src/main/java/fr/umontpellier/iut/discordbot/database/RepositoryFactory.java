@@ -20,6 +20,10 @@ public class RepositoryFactory {
 		this.repositories = new HashMap<>();
 	}
 
+	public void vacuumDatabase() throws SQLException {
+		this.db.vacuum();
+	}
+
 	public <T extends AbstractRepository<?>> T getRepository(Class<T> repositoryClass) {
 		T resolvedRepository = null;
 		boolean isCached = this.repositories.containsKey(repositoryClass);
