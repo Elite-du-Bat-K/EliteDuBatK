@@ -3,6 +3,7 @@ package fr.umontpellier.iut.discordbot.config;
 import com.google.gson.annotations.SerializedName;
 import org.jetbrains.annotations.Nullable;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -89,8 +90,48 @@ public class ConfigStructure {
 		}
 	}
 
+	/** Un service dont {@code /status} vérifie l'accès. Sans {@code pingUrl}, c'est {@code publicUrl} qui est testée. */
+	public static class StatusTarget {
+		private String displayName;
+		private String publicUrl;
+		private String pingUrl;
+
+		public StatusTarget() {
+		}
+
+		public StatusTarget(String displayName, String publicUrl, @Nullable String pingUrl) {
+			this.displayName = displayName;
+			this.publicUrl = publicUrl;
+			this.pingUrl = pingUrl;
+		}
+
+		public String getDisplayName() {
+			return displayName;
+		}
+
+		public String getPublicUrl() {
+			return publicUrl;
+		}
+
+		public String getCheckedUrl() {
+			String result = publicUrl;
+			boolean hasPingUrl = pingUrl != null && !pingUrl.isBlank();
+
+			if (hasPingUrl) {
+				result = pingUrl;
+			}
+
+			return result;
+		}
+	}
+
+	private static final int DEFAULT_STATUS_INTERVAL_SECONDS = 60;
+	private static final int MIN_STATUS_INTERVAL_SECONDS = 30;
+
 	private String token;
 	private String databasePath;
+	private List<StatusTarget> statusTargets;
+	private Integer statusIntervalSeconds;
 
 	@SerializedName(value = "studySuite", alternate = { "studysuite" })
 	private StudySuiteConfig studySuite;
@@ -134,6 +175,32 @@ public class ConfigStructure {
 		}
 
 		return result;
+	}
+
+	public List<StatusTarget> getStatusTargets() {
+		List<StatusTarget> result = List.of();
+		boolean hasTargets = statusTargets != null;
+
+		if (hasTargets) {
+			result = statusTargets;
+		}
+
+		return result;
+	}
+
+	/**
+	 * {@value #DEFAULT_STATUS_INTERVAL_SECONDS} s par défaut, et jamais moins de {@value #MIN_STATUS_INTERVAL_SECONDS} s :
+	 * une vérification qui échoue peut durer une trentaine de secondes avec ses essais.
+	 */
+	public Duration getStatusInterval() {
+		long seconds = DEFAULT_STATUS_INTERVAL_SECONDS;
+		boolean isConfigured = statusIntervalSeconds != null;
+
+		if (isConfigured) {
+			seconds = Math.max(statusIntervalSeconds, MIN_STATUS_INTERVAL_SECONDS);
+		}
+
+		return Duration.ofSeconds(seconds);
 	}
 
 	@Nullable
