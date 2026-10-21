@@ -6,6 +6,7 @@ import fr.umontpellier.iut.discordbot.database.RepositoryFactory;
 import fr.umontpellier.iut.discordbot.events.EventManager;
 import fr.umontpellier.iut.discordbot.services.LogSender;
 import fr.umontpellier.iut.discordbot.services.MessageCacheService;
+import fr.umontpellier.iut.discordbot.services.ServiceStatusMonitor;
 import fr.umontpellier.iut.discordbot.studysuite.StudySuiteClient;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -40,6 +41,9 @@ public class Bot implements Runnable {
 	@NotNull
 	private final MessageCacheService messageCacheService;
 
+	@NotNull
+	private final ServiceStatusMonitor statusMonitor;
+
 	public Bot() throws SQLException {
 		config = new ConfigLoader();
 		repositories = new RepositoryFactory(this);
@@ -53,6 +57,9 @@ public class Bot implements Runnable {
 
 		messageCacheService = new MessageCacheService(repositories.getCachedMessageRepository(), MAX_CACHED_MESSAGES);
 		messageCacheService.initialize();
+
+		statusMonitor = new ServiceStatusMonitor(config.get().getStatusTargets(), config.get().getStatusInterval());
+		statusMonitor.start();
 
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			try {
@@ -98,6 +105,11 @@ public class Bot implements Runnable {
 	@NotNull
 	public StudySuiteClient getStudySuite() {
 		return studySuite;
+	}
+
+	@NotNull
+	public ServiceStatusMonitor getStatusMonitor() {
+		return statusMonitor;
 	}
 
 	@Override

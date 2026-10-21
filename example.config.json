@@ -20,5 +20,10 @@
 	"studySuite": {
 		"baseUrl": "https://study-info.umontp.fr",
 		"apiKey": ""
-	}
+	},
+	"statusIntervalSeconds": 60,
+	"statusTargets": [
+		{ "displayName": "Moodle", "publicUrl": "https://moodle.umontpellier.fr" },
+		{ "displayName": "GitLab", "publicUrl": "https://gitlabinfo.iutmontp.univ-montp2.fr", "pingUrl": "https://gitlabinfo.iutmontp.univ-montp2.fr/api/v4/version" }
+	]
 }
