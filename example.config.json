@@ -3,7 +3,9 @@
 	"databasePath": "data.db",
 	"allowed_guild_id": "",
 	"adminRole": "",
+	"teacherRole": "",
 	"groups": {},
+	"announcementChannels": {},
 	"channels": {
 		"voice_channel": "",
 		"message_delete_channel": "",

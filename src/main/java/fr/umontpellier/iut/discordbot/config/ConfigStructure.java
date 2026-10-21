@@ -99,6 +99,8 @@ public class ConfigStructure {
 	private String allowedGuildId;
 
 	private String adminRole;
+	private String teacherRole;
+	private Map<String, String> announcementChannels;
 	private Map<String, List<String>> groups;
 	private Map<String, String> channels;
 
@@ -143,6 +145,22 @@ public class ConfigStructure {
 
 	public String getAdminRole() {
 		return adminRole;
+	}
+
+	public String getTeacherRole() {
+		return teacherRole;
+	}
+
+	/** Classe (une clé de {@code groups}, pour les rôles à mentionner) → salon d'annonces, dans l'ordre de la config. */
+	public Map<String, String> getAnnouncementChannels() {
+		Map<String, String> result = Map.of();
+		boolean hasChannels = announcementChannels != null;
+
+		if (hasChannels) {
+			result = announcementChannels;
+		}
+
+		return result;
 	}
 
 	public Map<String, String> getChannels() {

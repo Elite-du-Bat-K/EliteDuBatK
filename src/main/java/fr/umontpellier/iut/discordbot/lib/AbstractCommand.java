@@ -85,4 +85,16 @@ public abstract class AbstractCommand extends SharedBot {
 		return member.getRoles().stream().anyMatch(r -> r.getId().equals(adminRoleId));
 	}
 
+	/** Un membre est enseignant s'il a le rôle enseignant de la config. Les admins ont les mêmes droits. */
+	protected boolean isTeacher(Member member) {
+		boolean result = isAdmin(member);
+		String teacherRoleId = getBot().getConfig().get().getTeacherRole();
+		boolean hasTeacherRole = teacherRoleId != null && !teacherRoleId.isBlank();
+
+		if (!result && hasTeacherRole) {
+			result = member.getRoles().stream().anyMatch(r -> r.getId().equals(teacherRoleId));
+		}
+
+		return result;
+	}
 }

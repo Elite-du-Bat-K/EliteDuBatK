@@ -15,8 +15,12 @@ La configuration est lue dans `config.json` (dossier courant), ou dans le fichie
 	"databasePath": "data.db",
 	"allowed_guild_id": "ID_DU_SERVEUR",
 	"adminRole": "ID_DU_ROLE",
+	"teacherRole": "ID_DU_ROLE",
 	"groups": {
 		"nom-du-groupe": ["ID_ROLE_1", "ID_ROLE_2"]
+	},
+	"announcementChannels": {
+		"nom-du-groupe": "ID_DU_SALON"
 	},
 	"channels": {
 		"voice_channel": "ID_DU_SALON",
@@ -42,7 +46,9 @@ La configuration est lue dans `config.json` (dossier courant), ou dans le fichie
 | `databasePath` | Chemin du fichier SQLite. Un chemin relatif part du dossier courant du bot (voir [Docker](#docker)). |
 | `allowed_guild_id` | Identifiant du serveur |
 | `adminRole` | ID du rôle autorisé à utiliser `/lock`. Les membres avec la permission Administrateur y ont aussi accès. Pendant un verrouillage, ce rôle garde le droit d'écrire. |
-| `groups` | Groupes de rôles pour la commande de ping : nom du groupe → liste d'IDs de rôles. |
+| `teacherRole` | ID du rôle des enseignants, autorisés à utiliser `/annonce`. Les admins y ont aussi accès. |
+| `groups` | Groupes de rôles pour la commande de ping : nom du groupe → liste d'IDs de rôles. `/annonce` mentionne aussi ces rôles. |
+| `announcementChannels` | Salons d'annonces pour `/annonce` : nom du groupe (le même que dans `groups`) → ID du salon. 25 au plus. |
 | `channels` | Salons de logs. Plusieurs clés peuvent pointer vers le même salon ; une clé absente ou vide désactive ce log (avertissement au démarrage). |
 | `studySuite` | Accès à [StudySuite](#studysuite). `baseUrl` vide : `https://study-info.umontp.fr`. `apiKey` : une des clés `bot.apiKeys` de l'API, à ne jamais commiter. |
 
@@ -65,6 +71,14 @@ Les logs de salons, rôles, membres et sanctions viennent du journal d'audit Dis
 Pour copier un ID : activer le mode développeur (Paramètres → Avancés), puis clic droit → « Copier l'identifiant ».
 
 Le bot a besoin de l'intent privilégié **Message Content** (Discord Developer Portal → Bot), sinon il ne peut pas se connecter.
+
+## Annonces des enseignants
+
+`/annonce` (rôle `teacherRole` ou admin) ouvre un formulaire : les classes (une ou plusieurs, parmi `announcementChannels`) et le message (3500 caractères, markdown accepté). Le bot montre ensuite un aperçu privé avec **Envoyer** et **Annuler**. À l'envoi, l'annonce part dans le salon de chaque classe, signée du nom et de l'avatar de l'enseignant, avec les rôles de la classe (`groups`) mentionnés.
+
+- Seuls les rôles de la classe sont notifiés : un `@everyone` ou un autre rôle écrit dans le message ne prévient personne.
+- Le bot doit pouvoir écrire dans les salons d'annonces, et mentionner les rôles des classes (rôles « mentionnables », ou permission **Mentionner @everyone, @here et tous les rôles**).
+- Les aperçus en attente sont en mémoire : après un redémarrage du bot, il faut relancer `/annonce`.
 
 ## StudySuite
 
