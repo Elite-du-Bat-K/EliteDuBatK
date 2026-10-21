@@ -32,7 +32,12 @@ La configuration est lue dans `config.json` (dossier courant), ou dans le fichie
 	"studySuite": {
 		"baseUrl": "https://study-info.umontp.fr",
 		"apiKey": "CLE_DU_BOT"
-	}
+	},
+	"statusIntervalSeconds": 60,
+	"statusTargets": [
+		{ "displayName": "Moodle", "publicUrl": "https://moodle.umontpellier.fr" },
+		{ "displayName": "GitLab", "publicUrl": "https://gitlabinfo.iutmontp.univ-montp2.fr", "pingUrl": "https://gitlabinfo.iutmontp.univ-montp2.fr/api/v4/version" }
+	]
 }
 ```
 
@@ -44,6 +49,8 @@ La configuration est lue dans `config.json` (dossier courant), ou dans le fichie
 | `adminRole` | ID du rôle autorisé à utiliser `/lock`. Les membres avec la permission Administrateur y ont aussi accès. Pendant un verrouillage, ce rôle garde le droit d'écrire. |
 | `groups` | Groupes de rôles pour la commande de ping : nom du groupe → liste d'IDs de rôles. |
 | `channels` | Salons de logs. Plusieurs clés peuvent pointer vers le même salon ; une clé absente ou vide désactive ce log (avertissement au démarrage). |
+| `statusTargets` | Services vérifiés pour `/status`. `displayName` : le nom affiché ; `publicUrl` : le lien affiché ; `pingUrl` (facultatif) : l'URL testée à la place de `publicUrl`. |
+| `statusIntervalSeconds` | Facultatif. Intervalle entre deux vérifications des services, en secondes (60 par défaut, 30 au minimum). |
 | `studySuite` | Accès à [StudySuite](#studysuite). `baseUrl` vide : `https://study-info.umontp.fr`. `apiKey` : une des clés `bot.apiKeys` de l'API, à ne jamais commiter. |
 
 Salons importants (logs, usage réservé) (`channels`) :
@@ -65,6 +72,16 @@ Les logs de salons, rôles, membres et sanctions viennent du journal d'audit Dis
 Pour copier un ID : activer le mode développeur (Paramètres → Avancés), puis clic droit → « Copier l'identifiant ».
 
 Le bot a besoin de l'intent privilégié **Message Content** (Discord Developer Portal → Bot), sinon il ne peut pas se connecter.
+
+## Statut des services
+
+`/status` (ouvert à tous, réponse privée) dit si les services de `statusTargets` répondent, et depuis quand. Le bot les vérifie lui-même toutes les `statusIntervalSeconds` secondes (60 par défaut, 30 au minimum), depuis son serveur : si Moodle est vert ici mais ne charge pas chez soi, le problème vient de sa connexion. `/status` affiche le dernier résultat, sans relancer de vérification.
+
+- **En ligne** : réponse HTTP inférieure à 500 en moins de 5 secondes (une redirection vers la page de connexion compte).
+- **En panne** : réponse 5xx (page de maintenance comprise).
+- **Injoignable** : pas de réponse (délai dépassé, DNS, connexion refusée).
+
+Un échec est retenté jusqu'à 3 fois, à 5 secondes d'intervalle : un service n'est hors ligne que si les 3 essais échouent. Le « depuis » ne change qu'au passage entre en ligne et hors ligne. L'historique est en mémoire : après un redémarrage, tant que l'état n'a pas changé, le bot affiche « depuis au moins » l'heure de son démarrage.
 
 ## StudySuite
 
