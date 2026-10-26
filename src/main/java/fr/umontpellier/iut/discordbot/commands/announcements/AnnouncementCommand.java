@@ -1,7 +1,6 @@
 package fr.umontpellier.iut.discordbot.commands.announcements;
 
 import fr.umontpellier.iut.discordbot.Bot;
-import fr.umontpellier.iut.discordbot.config.ConfigStructure;
 import fr.umontpellier.iut.discordbot.lib.AbstractCommand;
 import fr.umontpellier.iut.discordbot.lib.BoundedCache;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
@@ -14,7 +13,8 @@ import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
+import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
@@ -32,6 +32,7 @@ import org.jetbrains.annotations.Nullable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -42,9 +43,9 @@ import java.util.concurrent.CompletableFuture;
  * {@code /annonce} : un enseignant envoie un message dans les salons d'annonces de classes.
  * <p>
  * La commande ouvre un formulaire (les classes, le message), puis montre un aperçu privé avec deux boutons
- * ({@code annonce:<send|cancel>:<id>}). L'annonce part dans le salon de chaque classe ({@code announcementChannels}),
- * avec les rôles de cette classe ({@code groups}) mentionnés. Les annonces en attente sont en mémoire : après un
- * redémarrage, l'aperçu expire.
+ * ({@code annonce:<send|cancel>:<id>}). Une classe est un rôle qui a un salon {@code <rôle>│annonces} (le nom que
+ * créent les migrations) : l'annonce part dans ce salon et mentionne ce rôle. Les annonces en attente sont en
+ * mémoire : après un redémarrage, l'aperçu expire.
  */
 public class AnnouncementCommand extends AbstractCommand {
 	private static final String NAME = "annonce";
@@ -54,8 +55,12 @@ public class AnnouncementCommand extends AbstractCommand {
 	private static final String SEND = "send";
 	private static final String CANCEL = "cancel";
 	private static final int MAX_PENDING = 100;
+	private static final String CHANNEL_SUFFIX = "\u2502annonces";
 
-	private record Pending(String authorId, List<String> classes, String message) {
+	private record Pending(String authorId, List<String> roleIds, String message) {
+	}
+
+	private record SchoolClass(Role role, TextChannel channel) {
 	}
 
 	private record Delivery(@Nullable String sentChannel, @Nullable String failure) {
@@ -77,7 +82,7 @@ public class AnnouncementCommand extends AbstractCommand {
 	@Override
 	public void execute(SlashCommandInteractionEvent event) {
 		Member member = event.getMember();
-		List<String> classes = selectableClasses();
+		List<SchoolClass> classes = selectableClasses(event.getGuild());
 		String refusal = "Cette commande ne s'utilise que sur le serveur.";
 		boolean isMember = member != null;
 		boolean isAllowed = isMember && isTeacher(member);
@@ -88,7 +93,7 @@ public class AnnouncementCommand extends AbstractCommand {
 		}
 
 		if (isAllowed && classes.isEmpty()) {
-			refusal = "Aucun salon d'annonces n'est configuré.";
+			refusal = "Aucun salon d'annonces trouvé (un salon « <rôle>" + CHANNEL_SUFFIX + " » par classe).";
 		}
 
 		if (canCompose) {
@@ -107,24 +112,24 @@ public class AnnouncementCommand extends AbstractCommand {
 		ModalMapping messageValue = event.getValue(FIELD_MESSAGE);
 		boolean isAllowed = member != null && isTeacher(member);
 		boolean hasValues = classesValue != null && messageValue != null;
-		List<String> classes = hasValues ? configuredOnly(classesValue.getAsStringList()) : List.of();
+		List<SchoolClass> classes = hasValues ? stillValid(event.getGuild(), classesValue.getAsStringList()) : List.of();
 		String message = hasValues ? messageValue.getAsString().strip() : "";
 		boolean isValid = isAllowed && !classes.isEmpty() && !message.isBlank();
 
 		if (isValid) {
 			String id = UUID.randomUUID().toString().replace("-", "");
-			pending.put(id, new Pending(member.getId(), classes, message));
+			List<String> roleIds = classes.stream().map(c -> c.role().getId()).toList();
+			pending.put(id, new Pending(member.getId(), roleIds, message));
 
 			ActionRow actions = ActionRow.of(
 					Button.success(NAME + ":" + SEND + ":" + id, "Envoyer"),
 					Button.secondary(NAME + ":" + CANCEL + ":" + id, "Annuler"));
-			List<String> roleIds = classes.stream().flatMap(c -> config().getRolesIdForGroup(c).stream()).toList();
 
 			event.reply(new MessageCreateBuilder()
 							.useComponentsV2()
 							.setComponents(AnnouncementFormatter.previewHeader(), AnnouncementFormatter.announcement(
 									member.getEffectiveName(), member.getEffectiveAvatarUrl(), message,
-									AnnouncementFormatter.mentions(roleIds), classes, Instant.now(), actions))
+									AnnouncementFormatter.mentions(roleIds), names(classes), Instant.now(), actions))
 							// L'aperçu montre les mentions sans prévenir personne.
 							.setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
 							.build())
@@ -175,40 +180,41 @@ public class AnnouncementCommand extends AbstractCommand {
 
 	private CompletableFuture<List<Delivery>> deliver(@Nullable Guild guild, Member author, Pending announcement) {
 		Instant now = Instant.now();
+		List<SchoolClass> classes = stillValid(guild, announcement.roleIds());
+		List<String> names = names(classes);
+		int missing = announcement.roleIds().size() - classes.size();
 		List<CompletableFuture<Delivery>> deliveries = new ArrayList<>();
 
-		for (String schoolClass : announcement.classes()) {
-			String channelId = config().getAnnouncementChannels().get(schoolClass);
-			GuildMessageChannel channel = guild == null || channelId == null
-					? null
-					: guild.getChannelById(GuildMessageChannel.class, channelId);
-			CompletableFuture<Delivery> delivery = CompletableFuture.completedFuture(
-					new Delivery(null, schoolClass + " : salon d'annonces introuvable"));
+		// Rôle supprimé ou salon renommé depuis l'aperçu.
+		if (missing > 0) {
+			deliveries.add(CompletableFuture.completedFuture(
+					new Delivery(null, missing + " classe(s) sans salon d'annonces")));
+		}
 
-			if (channel != null) {
-				List<String> roleIds = config().getRolesIdForGroup(schoolClass);
-				delivery = channel.sendMessage(new MessageCreateBuilder()
-								.useComponentsV2()
-								.setComponents(AnnouncementFormatter.announcement(author.getEffectiveName(),
-										author.getEffectiveAvatarUrl(), announcement.message(),
-										AnnouncementFormatter.mentions(roleIds), announcement.classes(), now, null))
-								// Seuls les rôles de la classe sont notifiés : un @everyone dans le texte ne prévient personne.
-								.setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
-								.mentionRoles(roleIds)
-								.build())
-						.submit()
-						.handle((message, error) -> {
-							Delivery result = new Delivery(channel.getAsMention(), null);
+		for (SchoolClass schoolClass : classes) {
+			String roleId = schoolClass.role().getId();
+			TextChannel channel = schoolClass.channel();
+			CompletableFuture<Delivery> delivery = channel.sendMessage(new MessageCreateBuilder()
+							.useComponentsV2()
+							.setComponents(AnnouncementFormatter.announcement(author.getEffectiveName(),
+									author.getEffectiveAvatarUrl(), announcement.message(),
+									AnnouncementFormatter.mentions(List.of(roleId)), names, now, null))
+							// Seul le rôle de la classe est notifié : un @everyone dans le texte ne prévient personne.
+							.setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
+							.mentionRoles(roleId)
+							.build())
+					.submit()
+					.handle((message, error) -> {
+						Delivery result = new Delivery(channel.getAsMention(), null);
 
-							if (error != null) {
-								logger.warn("Announcement to {} failed", schoolClass, error);
-								result = new Delivery(null, schoolClass + " : le bot n'a pas pu écrire dans "
-										+ channel.getAsMention());
-							}
+						if (error != null) {
+							logger.warn("Announcement to {} failed", schoolClass.role().getName(), error);
+							result = new Delivery(null, schoolClass.role().getName()
+									+ " : le bot n'a pas pu écrire dans " + channel.getAsMention());
+						}
 
-							return result;
-						});
-			}
+						return result;
+					});
 
 			deliveries.add(delivery);
 		}
@@ -217,11 +223,11 @@ public class AnnouncementCommand extends AbstractCommand {
 				.thenApply(ignored -> deliveries.stream().map(CompletableFuture::join).toList());
 	}
 
-	private Modal composeModal(List<String> classes) {
+	private Modal composeModal(List<SchoolClass> classes) {
 		StringSelectMenu.Builder menu = StringSelectMenu.create(FIELD_CLASSES)
 				.setPlaceholder("Une ou plusieurs classes")
 				.setRequiredRange(1, classes.size());
-		classes.forEach(schoolClass -> menu.addOption(schoolClass, schoolClass));
+		classes.forEach(c -> menu.addOption(c.role().getName(), c.role().getId()));
 
 		TextInput message = TextInput.create(FIELD_MESSAGE, TextInputStyle.PARAGRAPH)
 				.setPlaceholder("Le message à transmettre (markdown accepté)")
@@ -233,12 +239,24 @@ public class AnnouncementCommand extends AbstractCommand {
 				.build();
 	}
 
-	/** Les classes du menu, dans l'ordre de la config. Discord limite un menu à 25 choix. */
-	private List<String> selectableClasses() {
-		List<String> classes = List.copyOf(config().getAnnouncementChannels().keySet());
+	/** Les classes du serveur, triées par nom. Discord limite un menu à 25 choix. */
+	private List<SchoolClass> selectableClasses(@Nullable Guild guild) {
+		List<SchoolClass> classes = new ArrayList<>();
+
+		if (guild != null) {
+			for (Role role : guild.getRoles()) {
+				TextChannel channel = announcementChannel(guild, role);
+
+				if (channel != null) {
+					classes.add(new SchoolClass(role, channel));
+				}
+			}
+		}
+
+		classes.sort(Comparator.comparing(c -> c.role().getName(), String.CASE_INSENSITIVE_ORDER));
 
 		if (classes.size() > StringSelectMenu.OPTIONS_MAX_AMOUNT) {
-			logger.warn("{} announcement channels configured, only the first {} can be selected", classes.size(),
+			logger.warn("{} announcement channels found, only the first {} can be selected", classes.size(),
 					StringSelectMenu.OPTIONS_MAX_AMOUNT);
 			classes = classes.subList(0, StringSelectMenu.OPTIONS_MAX_AMOUNT);
 		}
@@ -246,12 +264,36 @@ public class AnnouncementCommand extends AbstractCommand {
 		return classes;
 	}
 
-	/** La config a pu changer entre l'ouverture du formulaire et son envoi. */
-	private List<String> configuredOnly(List<String> classes) {
-		return classes.stream().filter(config().getAnnouncementChannels()::containsKey).toList();
+	/** Le rôle ou son salon ont pu disparaître entre l'ouverture du formulaire et l'envoi. */
+	private List<SchoolClass> stillValid(@Nullable Guild guild, List<String> roleIds) {
+		List<SchoolClass> classes = new ArrayList<>();
+
+		if (guild != null) {
+			for (String roleId : roleIds) {
+				Role role = guild.getRoleById(roleId);
+				TextChannel channel = role == null ? null : announcementChannel(guild, role);
+
+				if (channel != null) {
+					classes.add(new SchoolClass(role, channel));
+				}
+			}
+		}
+
+		return classes;
 	}
 
-	private ConfigStructure config() {
-		return getBot().getConfig().get();
+	@Nullable
+	private static TextChannel announcementChannel(Guild guild, Role role) {
+		List<TextChannel> channels = guild.getTextChannelsByName(channelName(role.getName()), true);
+		return channels.isEmpty() ? null : channels.getFirst();
+	}
+
+	/** Le nom que créent les migrations : le rôle en minuscules, puis {@code │annonces} (U+2502, pas un pipe). */
+	static String channelName(String roleName) {
+		return roleName.toLowerCase() + CHANNEL_SUFFIX;
+	}
+
+	private static List<String> names(List<SchoolClass> classes) {
+		return classes.stream().map(c -> c.role().getName()).toList();
 	}
 }

@@ -5,7 +5,6 @@
 	"adminRole": "",
 	"teacherRole": "",
 	"groups": {},
-	"announcementChannels": {},
 	"channels": {
 		"voice_channel": "",
 		"message_delete_channel": "",
