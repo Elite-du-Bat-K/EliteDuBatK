@@ -4,6 +4,7 @@ import fr.umontpellier.iut.discordbot.Bot;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.interactions.Interaction;
@@ -45,6 +46,14 @@ public abstract class AbstractCommand extends SharedBot {
 	}
 
 	/**
+	 * Un formulaire (modal) ouvert par cette commande. Il lui revient quand son identifiant commence par
+	 * {@code <nom de la commande>:}.
+	 */
+	public void onModal(ModalInteractionEvent event) {
+		event.reply("Ce formulaire n'est plus actif.").setEphemeral(true).queue();
+	}
+
+	/**
 	 *
 	 * @param event The event from which we want to get the member. It should be an instance of {@link Interaction}
 	 * @return An {@link Optional} of the {@link Member} if it exists, else an empty {@link Optional}
@@ -74,5 +83,18 @@ public abstract class AbstractCommand extends SharedBot {
 		String adminRoleId = getBot().getConfig().get().getAdminRole();
 		if (adminRoleId == null || adminRoleId.isBlank()) return false;
 		return member.getRoles().stream().anyMatch(r -> r.getId().equals(adminRoleId));
+	}
+
+	/** Un membre est enseignant s'il a le rôle enseignant de la config. Les admins ont les mêmes droits. */
+	protected boolean isTeacher(Member member) {
+		boolean result = isAdmin(member);
+		String teacherRoleId = getBot().getConfig().get().getTeacherRole();
+		boolean hasTeacherRole = teacherRoleId != null && !teacherRoleId.isBlank();
+
+		if (!result && hasTeacherRole) {
+			result = member.getRoles().stream().anyMatch(r -> r.getId().equals(teacherRoleId));
+		}
+
+		return result;
 	}
 }

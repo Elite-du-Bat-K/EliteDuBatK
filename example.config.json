@@ -3,6 +3,7 @@
 	"databasePath": "data.db",
 	"allowed_guild_id": "",
 	"adminRole": "",
+	"teacherRole": "",
 	"groups": {},
 	"channels": {
 		"voice_channel": "",

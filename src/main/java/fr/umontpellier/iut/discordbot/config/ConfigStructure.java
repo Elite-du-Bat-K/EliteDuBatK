@@ -140,6 +140,7 @@ public class ConfigStructure {
 	private String allowedGuildId;
 
 	private String adminRole;
+	private String teacherRole;
 	private Map<String, List<String>> groups;
 	private Map<String, String> channels;
 
@@ -210,6 +211,10 @@ public class ConfigStructure {
 
 	public String getAdminRole() {
 		return adminRole;
+	}
+
+	public String getTeacherRole() {
+		return teacherRole;
 	}
 
 	public Map<String, String> getChannels() {

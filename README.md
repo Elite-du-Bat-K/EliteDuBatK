@@ -15,6 +15,7 @@ La configuration est lue dans `config.json` (dossier courant), ou dans le fichie
 	"databasePath": "data.db",
 	"allowed_guild_id": "ID_DU_SERVEUR",
 	"adminRole": "ID_DU_ROLE",
+	"teacherRole": "ID_DU_ROLE",
 	"groups": {
 		"nom-du-groupe": ["ID_ROLE_1", "ID_ROLE_2"]
 	},
@@ -47,6 +48,7 @@ La configuration est lue dans `config.json` (dossier courant), ou dans le fichie
 | `databasePath` | Chemin du fichier SQLite. Un chemin relatif part du dossier courant du bot (voir [Docker](#docker)). |
 | `allowed_guild_id` | Identifiant du serveur |
 | `adminRole` | ID du rôle autorisé à utiliser `/lock`. Les membres avec la permission Administrateur y ont aussi accès. Pendant un verrouillage, ce rôle garde le droit d'écrire. |
+| `teacherRole` | ID du rôle des enseignants, autorisés à utiliser `/annonce`. Les admins y ont aussi accès. |
 | `groups` | Groupes de rôles pour la commande de ping : nom du groupe → liste d'IDs de rôles. |
 | `channels` | Salons de logs. Plusieurs clés peuvent pointer vers le même salon ; une clé absente ou vide désactive ce log (avertissement au démarrage). |
 | `statusTargets` | Services vérifiés pour `/status`. `displayName` : le nom affiché ; `publicUrl` : le lien affiché ; `pingUrl` (facultatif) : l'URL testée à la place de `publicUrl`. |
@@ -72,6 +74,15 @@ Les logs de salons, rôles, membres et sanctions viennent du journal d'audit Dis
 Pour copier un ID : activer le mode développeur (Paramètres → Avancés), puis clic droit → « Copier l'identifiant ».
 
 Le bot a besoin de l'intent privilégié **Message Content** (Discord Developer Portal → Bot), sinon il ne peut pas se connecter.
+
+## Annonces des enseignants
+
+`/annonce` (rôle `teacherRole` ou admin) ouvre un formulaire : les classes (une ou plusieurs) et le message (3500 caractères, markdown accepté). Le bot montre ensuite un aperçu privé avec **Envoyer** et **Annuler**. À l'envoi, l'annonce part dans le salon de chaque classe, signée du nom et de l'avatar de l'enseignant, avec le rôle de la classe mentionné.
+
+- Une classe est un rôle qui a un salon `<rôle en minuscules>│annonces` (le `│` est U+2502, pas un pipe), le nom que créent les migrations. Rien à configurer ; 25 classes au plus dans le menu.
+- Seul le rôle de la classe est notifié : un `@everyone` ou un autre rôle écrit dans le message ne prévient personne.
+- Le bot doit pouvoir écrire dans les salons d'annonces, et mentionner les rôles des classes (rôles « mentionnables », ou permission **Mentionner @everyone, @here et tous les rôles**).
+- Les aperçus en attente sont en mémoire : après un redémarrage du bot, il faut relancer `/annonce`.
 
 ## Statut des services
 
