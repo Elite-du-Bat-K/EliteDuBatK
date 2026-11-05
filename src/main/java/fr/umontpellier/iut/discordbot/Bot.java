@@ -4,6 +4,7 @@ import fr.umontpellier.iut.discordbot.commands.CommandManager;
 import fr.umontpellier.iut.discordbot.config.ConfigLoader;
 import fr.umontpellier.iut.discordbot.database.RepositoryFactory;
 import fr.umontpellier.iut.discordbot.events.EventManager;
+import fr.umontpellier.iut.discordbot.services.CryptoReceiptService;
 import fr.umontpellier.iut.discordbot.services.LogSender;
 import fr.umontpellier.iut.discordbot.services.MessageCacheService;
 import fr.umontpellier.iut.discordbot.services.ServiceStatusMonitor;
@@ -12,7 +13,6 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
-
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,33 +33,29 @@ public class Bot implements Runnable {
 	@NotNull
 	private final EventManager events;
 	private JDA jda;
-
 	private final LogSender logSender;
 	@NotNull
 	private final StudySuiteClient studySuite;
-
 	@NotNull
 	private final MessageCacheService messageCacheService;
-
 	@NotNull
 	private final ServiceStatusMonitor statusMonitor;
+	@NotNull
+	private final CryptoReceiptService cryptoReceiptService;
 
 	public Bot() throws SQLException {
 		config = new ConfigLoader();
 		repositories = new RepositoryFactory(this);
 		repositories.vacuumDatabase();
-		LOGGER.info("Database vacuumed successfully");
-
 		commands = new CommandManager(this);
 		events = new EventManager(this);
 		logSender = new LogSender(this);
 		studySuite = new StudySuiteClient(config.get().getStudySuite());
-
 		messageCacheService = new MessageCacheService(repositories.getCachedMessageRepository(), MAX_CACHED_MESSAGES);
 		messageCacheService.initialize();
-
 		statusMonitor = new ServiceStatusMonitor(config.get().getStatusTargets(), config.get().getStatusInterval());
 		statusMonitor.start();
+		cryptoReceiptService = new CryptoReceiptService();
 
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			try {
@@ -112,6 +108,11 @@ public class Bot implements Runnable {
 		return statusMonitor;
 	}
 
+	@NotNull
+	public CryptoReceiptService getCryptoReceiptService() {
+		return cryptoReceiptService;
+	}
+
 	@Override
 	public void run() {
 		JDABuilder builder = JDABuilder.createLight(config.get().getToken(), List.of(
@@ -121,7 +122,6 @@ public class Bot implements Runnable {
 				GatewayIntent.GUILD_MEMBERS,
 				GatewayIntent.GUILD_MODERATION)).enableCache(CacheFlag.VOICE_STATE)
 				.setBulkDeleteSplittingEnabled(false);
-
 		events.registerEvents(builder);
 		this.jda = builder.build();
 	}

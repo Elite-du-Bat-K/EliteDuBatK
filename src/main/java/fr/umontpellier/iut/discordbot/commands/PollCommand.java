@@ -23,6 +23,7 @@ import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
 import net.dv8tion.jda.api.utils.FileUpload;
 import org.jetbrains.annotations.NotNull;
+
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -32,7 +33,6 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class PollCommand extends AbstractCommandWithAutocomplete {
-
 	public PollCommand(Bot bot) {
 		super(bot);
 	}
@@ -40,56 +40,64 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 	@NotNull
 	@Override
 	public SlashCommandData getCommandInformation() {
-		SubcommandData createData = new SubcommandData("create", "Create a new poll")
-				.addOption(OptionType.STRING, "title", "Poll title", true)
-				.addOption(OptionType.STRING, "description", "Poll description", true)
-				.addOption(OptionType.STRING, "choices", "Choices separated by | (e.g. Yes|No)", true)
-				.addOption(OptionType.INTEGER, "duration_minutes", "Poll duration in minutes (optional)", false);
+		SubcommandData createData = new SubcommandData("create", "Créer un nouveau sondage")
+				.addOption(OptionType.STRING, "title", "Titre du sondage", true)
+				.addOption(OptionType.STRING, "description", "Description du sondage", true)
+				.addOption(OptionType.STRING, "choices", "Choix séparés par | (ex: Oui|Non)", true)
+				.addOption(OptionType.INTEGER, "duration_minutes", "Durée du sondage en minutes (optionnel)", false);
 
-		SubcommandData closeData = new SubcommandData("close", "Close a poll")
-				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true);
+		SubcommandData closeData = new SubcommandData("close", "Fermer un sondage")
+				.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true);
 
-		SubcommandData voteData = new SubcommandData("vote", "Vote on a poll")
-				.addOption(OptionType.INTEGER, "poll_id", "Poll ID", true, true)
-				.addOption(OptionType.INTEGER, "choice_index", "Select your choice", true, true);
+		SubcommandData voteData = new SubcommandData("vote", "Voter à un sondage")
+				.addOption(OptionType.INTEGER, "poll_id", "ID du sondage", true, true)
+				.addOption(OptionType.INTEGER, "choice_index", "Sélectionne ton choix", true, true);
 
-		SubcommandData resultsData = new SubcommandData("results", "View poll results")
-				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true)
-				.addOption(OptionType.BOOLEAN, "public", "Make the results visible to everyone", false);
+		SubcommandData resultsData = new SubcommandData("results", "Voir les résultats du sondage")
+				.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true)
+				.addOption(OptionType.BOOLEAN, "public", "Rendre les résultats visibles par tous", false);
 
-		SubcommandData exportResultsData = new SubcommandData("export", "Export poll results to TXT")
-				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true);
+		SubcommandData exportResultsData = new SubcommandData("export", "Exporter les résultats du sondage (TXT)")
+				.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true);
 
-		SubcommandData commentData = new SubcommandData("comment", "Add a comment")
-				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true)
-				.addOption(OptionType.STRING, "text", "Comment text", true)
-				.addOption(OptionType.BOOLEAN, "anonymous", "Hide your identity", true);
+		SubcommandData commentData = new SubcommandData("comment", "Ajouter un commentaire")
+				.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true)
+				.addOption(OptionType.STRING, "text", "Texte du commentaire", true)
+				.addOption(OptionType.BOOLEAN, "anonymous", "Masquer ton identité", true);
 
-		SubcommandData exportCommentsData = new SubcommandData("export_comments", "Export all comments to TSV")
-				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true);
+		SubcommandData exportCommentsData = new SubcommandData("export_comments",
+				"Exporter tous les commentaires (TSV)")
+				.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true);
 
-		SubcommandData deleteData = new SubcommandData("delete", "Delete all database entries for a poll")
-				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true);
+		SubcommandData deleteData = new SubcommandData("delete", "Supprimer le sondage et toutes ses données")
+				.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true);
 
-		SubcommandData viewData = new SubcommandData("info", "View poll information and metadata")
-				.addOption(OptionType.INTEGER, "id", "Poll ID", true, true);
+		SubcommandData viewData = new SubcommandData("info", "Voir les informations et métadonnées du sondage")
+				.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true);
 
-		SubcommandGroupData restrictionGroup = new SubcommandGroupData("restriction", "Manage poll vote restrictions")
+		SubcommandData publicKeyData = new SubcommandData("publickey",
+				"Télécharger la clé publique du serveur pour vérifier les reçus");
+
+		SubcommandData regenerateKeysData = new SubcommandData("regenerate_keys",
+				"Générer une nouvelle paire de clés (Admin)");
+
+		SubcommandGroupData restrictionGroup = new SubcommandGroupData("restriction", "Gérer les restrictions de vote")
 				.addSubcommands(
-						new SubcommandData("mode", "Set restriction mode")
-								.addOption(OptionType.INTEGER, "id", "Poll ID", true, true)
-								.addOption(OptionType.STRING, "type", "Mode: NONE, WHITELIST, BLACKLIST", true)
-								.addOption(OptionType.BOOLEAN, "force", "Force change (removes existing roles)", false),
-						new SubcommandData("add_role", "Add role to restriction list")
-								.addOption(OptionType.INTEGER, "id", "Poll ID", true, true)
-								.addOption(OptionType.ROLE, "role", "Target role", true),
-						new SubcommandData("remove_role", "Remove role from restriction list")
-								.addOption(OptionType.INTEGER, "id", "Poll ID", true, true)
-								.addOption(OptionType.ROLE, "role", "Target role", true));
+						new SubcommandData("mode", "Définir le mode de restriction")
+								.addOption(OptionType.STRING, "id", "ID du sondage", true, true)
+								.addOption(OptionType.STRING, "type", "Mode : NONE, WHITELIST, BLACKLIST", true)
+								.addOption(OptionType.BOOLEAN, "force", "Forcer le changement (supprime les rôles)",
+										false),
+						new SubcommandData("add_role", "Ajouter un rôle à la liste de restriction")
+								.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true)
+								.addOption(OptionType.ROLE, "role", "Rôle cible", true),
+						new SubcommandData("remove_role", "Retirer un rôle de la liste de restriction")
+								.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true)
+								.addOption(OptionType.ROLE, "role", "Rôle cible", true));
 
-		return Commands.slash("poll", "Manage polls")
+		return Commands.slash("poll", "Gérer les sondages")
 				.addSubcommands(createData, closeData, voteData, resultsData, exportResultsData, commentData,
-						exportCommentsData, deleteData, viewData)
+						exportCommentsData, deleteData, viewData, publicKeyData, regenerateKeysData)
 				.addSubcommandGroups(restrictionGroup)
 				.setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.USE_APPLICATION_COMMANDS));
 	}
@@ -107,6 +115,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				boolean isMode = subName.equals("mode");
 				boolean isAddRole = subName.equals("add_role");
 				boolean isRemoveRole = subName.equals("remove_role");
+
 				if (isMode) {
 					this.handleRestrictionMode(event);
 				} else if (isAddRole) {
@@ -114,10 +123,10 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				} else if (isRemoveRole) {
 					this.handleRestrictionRemoveRole(event);
 				} else {
-					event.reply("Unknown restriction subcommand.").setEphemeral(true).queue();
+					event.reply("Sous-commande de restriction inconnue.").setEphemeral(true).queue();
 				}
 			} else {
-				event.reply("Unknown subcommand group.").setEphemeral(true).queue();
+				event.reply("Groupe de sous-commandes inconnu.").setEphemeral(true).queue();
 			}
 		} else if (hasSubName) {
 			boolean isCreate = subName.equals("create");
@@ -129,6 +138,8 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			boolean isExportComments = subName.equals("export_comments");
 			boolean isDelete = subName.equals("delete");
 			boolean isView = subName.equals("info");
+			boolean isPublicKey = subName.equals("publickey");
+			boolean isRegenerateKeys = subName.equals("regenerate_keys");
 
 			if (isCreate) {
 				this.handleCreate(event);
@@ -148,11 +159,15 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				this.handleDelete(event);
 			} else if (isView) {
 				this.handleView(event);
+			} else if (isPublicKey) {
+				this.handlePublicKey(event);
+			} else if (isRegenerateKeys) {
+				this.handleRegenerateKeys(event);
 			} else {
-				event.reply("Unknown subcommand.").setEphemeral(true).queue();
+				event.reply("Sous-commande inconnue.").setEphemeral(true).queue();
 			}
 		} else {
-			event.reply("No subcommand provided.").setEphemeral(true).queue();
+			event.reply("Aucune sous-commande fournie.").setEphemeral(true).queue();
 		}
 	}
 
@@ -228,12 +243,13 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		OptionMapping durationOpt = event.getOption("duration_minutes");
 		Long closesAt = null;
 		boolean hasDuration = durationOpt != null;
+
 		if (hasDuration) {
 			long durationMs = durationOpt.getAsLong() * 60L * 1000L;
 			closesAt = Instant.now().atZone(ZoneOffset.UTC).toInstant().toEpochMilli() + durationMs;
 		}
 
-		String responseMessage = "Poll creation failed.";
+		String responseMessage = "Échec de la création du sondage.";
 		String[] choices = choicesRaw.split("\\|");
 		boolean hasValidChoices = choices.length >= 2;
 
@@ -254,7 +270,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				}
 			}
 			pollId = latestId;
-
 			long localIndex = 1L;
 			for (String c : choices) {
 				String cleanChoice = c.trim();
@@ -264,16 +279,17 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 					localIndex = localIndex + 1L;
 				}
 			}
-			responseMessage = "Poll created successfully with ID " + pollId;
+			responseMessage = "Sondage créé avec succès avec l'ID " + pollId;
 		} else {
-			responseMessage = "You must provide at least two choices separated by |";
+			responseMessage = "Tu dois fournir au moins deux choix séparés par |";
 		}
+
 		event.reply(responseMessage).queue();
 	}
 
 	private void handleClose(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
-		String responseMessage = "Close operation failed.";
+		String responseMessage = "Échec de l'opération de fermeture.";
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -284,6 +300,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			boolean isAdmin = false;
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
+
 			if (hasMember) {
 				isAdmin = this.isAdmin(eventMember);
 			}
@@ -293,19 +310,20 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				PollRepository.Poll updatedPoll = new PollRepository.Poll(p.getId(), p.getTitle(), p.getDescription(),
 						false, p.getCreatorId(), p.getClosesAt(), p.getRestrictionMode());
 				pollRepo.update(updatedPoll);
-				responseMessage = "Poll " + pollId + " has been marked as closed.";
+				responseMessage = "Le sondage " + pollId + " a été marqué comme fermé.";
 			} else {
-				responseMessage = "You do not have permission to close this poll.";
+				responseMessage = "Tu n'as pas la permission de fermer ce sondage.";
 			}
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
 	private void handleDelete(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
-		String responseMessage = "Delete operation failed.";
+		String responseMessage = "Échec de la suppression.";
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -316,6 +334,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			boolean isAdmin = false;
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
+
 			if (hasMember) {
 				isAdmin = this.isAdmin(eventMember);
 			}
@@ -327,19 +346,21 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				this.getBot().getRepositories().getRepository(PollCommentRepository.class).deleteByPollId(pollId);
 				this.getBot().getRepositories().getRepository(PollVoterRepository.class).deleteByPollId(pollId);
 				this.getBot().getRepositories().getRepository(PollRoleRepository.class).deleteByPollId(pollId);
-				responseMessage = "Poll " + pollId + " and all related data have been completely deleted.";
+				responseMessage = "Le sondage " + pollId
+						+ " et toutes les données associées ont été complètement supprimés.";
 			} else {
-				responseMessage = "You do not have permission to delete this poll.";
+				responseMessage = "Tu n'as pas la permission de supprimer ce sondage.";
 			}
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
 	private void handleView(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
-		String responseMessage = "View operation failed.";
+		String responseMessage = "Échec de l'opération d'affichage.";
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -347,30 +368,30 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		if (isPresent) {
 			PollRepository.Poll p = pollOpt.get();
 			StringBuilder sb = new StringBuilder();
-			sb.append("**Title**: ").append(p.getTitle()).append("\n");
-			sb.append("**Description**: ").append(p.getDescription()).append("\n");
-			sb.append("**Status**: ").append(this.isEffectivelyOpen(p) ? "Open" : "Closed").append("\n");
+			sb.append("**Titre** : ").append(p.getTitle()).append("\n");
+			sb.append("**Description** : ").append(p.getDescription()).append("\n");
+			sb.append("**Statut** : ").append(this.isEffectivelyOpen(p) ? "Ouvert" : "Fermé").append("\n");
 
 			boolean hasClosesAt = p.getClosesAt() != null;
 			if (hasClosesAt) {
 				long unixSeconds = p.getClosesAt() / 1000L;
-				sb.append("**Closes At (UTC)**: <t:").append(unixSeconds).append(":F>\n");
+				sb.append("**Fermeture (UTC)** : <t:").append(unixSeconds).append(":F>\n");
 			}
 
-			sb.append("**Restriction Mode**: ").append(p.getRestrictionMode()).append("\n");
-
+			sb.append("**Mode de restriction** : ").append(p.getRestrictionMode()).append("\n");
 			PollRoleRepository roleRepo = this.getBot().getRepositories().getRepository(PollRoleRepository.class);
 			List<PollRoleRepository.PollRole> roles = roleRepo.findByPollId(pollId);
 			boolean hasRoles = !roles.isEmpty();
+
 			if (hasRoles) {
-				sb.append("**Target Roles**: ");
+				sb.append("**Rôles cibles** : ");
 				for (PollRoleRepository.PollRole pr : roles) {
 					sb.append("<@&").append(pr.getRoleId()).append("> ");
 				}
 				sb.append("\n");
 			}
 
-			sb.append("\n**Choices**:\n");
+			sb.append("\n**Choix** :\n");
 			PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
 			List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
 			for (PollChoiceRepository.PollChoice c : choices) {
@@ -378,8 +399,9 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			}
 			responseMessage = sb.toString();
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -388,8 +410,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		String modeInput = Objects.requireNonNull(event.getOption("type")).getAsString().toUpperCase();
 		OptionMapping forceOpt = event.getOption("force");
 		boolean force = forceOpt != null && forceOpt.getAsBoolean();
-
-		String responseMessage = "Restriction update failed.";
+		String responseMessage = "Échec de la mise à jour de la restriction.";
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -400,6 +421,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			boolean isAdmin = false;
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
+
 			if (hasMember) {
 				isAdmin = this.isAdmin(eventMember);
 			}
@@ -413,7 +435,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 					if (!p.getRestrictionMode().equals(modeInput) && !p.getRestrictionMode().equals("NONE")) {
 						if (!force) {
 							proceed = false;
-							responseMessage = "Cannot change active restriction mode directly without passing 'force: True', as it will clear existing roles.";
+							responseMessage = "Impossible de modifier le mode de restriction sans 'force: True', car cela supprimera les rôles existants.";
 						} else {
 							this.getBot().getRepositories().getRepository(PollRoleRepository.class)
 									.deleteByPollId(pollId);
@@ -423,25 +445,25 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 						PollRepository.Poll updatedPoll = new PollRepository.Poll(p.getId(), p.getTitle(),
 								p.getDescription(), p.isOpen(), p.getCreatorId(), p.getClosesAt(), modeInput);
 						pollRepo.update(updatedPoll);
-						responseMessage = "Poll restriction mode updated to " + modeInput;
+						responseMessage = "Mode de restriction du sondage mis à jour en " + modeInput;
 					}
 				} else {
-					responseMessage = "Invalid mode. Use NONE, WHITELIST, or BLACKLIST.";
+					responseMessage = "Mode invalide. Utilise NONE, WHITELIST ou BLACKLIST.";
 				}
 			} else {
-				responseMessage = "You do not have permission to modify this poll.";
+				responseMessage = "Tu n'as pas la permission de modifier ce sondage.";
 			}
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
 	private void handleRestrictionAddRole(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		Role targetRole = Objects.requireNonNull(event.getOption("role")).getAsRole();
-
-		String responseMessage = "Role addition failed.";
+		String responseMessage = "Échec de l'ajout du rôle.";
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -452,6 +474,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			boolean isAdmin = false;
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
+
 			if (hasMember) {
 				isAdmin = this.isAdmin(eventMember);
 			}
@@ -460,27 +483,27 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			if (canModify) {
 				boolean isNone = p.getRestrictionMode().equals("NONE");
 				if (isNone) {
-					responseMessage = "Cannot add roles when restriction mode is NONE. Change the mode first.";
+					responseMessage = "Impossible d'ajouter des rôles quand le mode de restriction est NONE. Change le mode d'abord.";
 				} else {
 					PollRoleRepository roleRepo = this.getBot().getRepositories()
 							.getRepository(PollRoleRepository.class);
 					roleRepo.insert(new PollRoleRepository.PollRole(0, pollId, targetRole.getId()));
-					responseMessage = "Role successfully added to the poll's " + p.getRestrictionMode() + " list.";
+					responseMessage = "Rôle ajouté avec succès à la liste " + p.getRestrictionMode() + " du sondage.";
 				}
 			} else {
-				responseMessage = "You do not have permission to modify this poll.";
+				responseMessage = "Tu n'as pas la permission de modifier ce sondage.";
 			}
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
 	private void handleRestrictionRemoveRole(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		Role targetRole = Objects.requireNonNull(event.getOption("role")).getAsRole();
-
-		String responseMessage = "Role removal failed.";
+		String responseMessage = "Échec de la suppression du rôle.";
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -491,6 +514,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			boolean isAdmin = false;
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
+
 			if (hasMember) {
 				isAdmin = this.isAdmin(eventMember);
 			}
@@ -500,16 +524,17 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				PollRoleRepository roleRepo = this.getBot().getRepositories().getRepository(PollRoleRepository.class);
 				boolean deleted = roleRepo.deleteByPollIdAndRoleId(pollId, targetRole.getId());
 				if (deleted) {
-					responseMessage = "Role successfully removed from the poll restriction list.";
+					responseMessage = "Rôle retiré avec succès de la liste de restriction du sondage.";
 				} else {
-					responseMessage = "Role was not found in the restriction list.";
+					responseMessage = "Le rôle n'a pas été trouvé dans la liste de restriction.";
 				}
 			} else {
-				responseMessage = "You do not have permission to modify this poll.";
+				responseMessage = "Tu n'as pas la permission de modifier ce sondage.";
 			}
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -517,26 +542,22 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		long pollId = Objects.requireNonNull(event.getOption("poll_id")).getAsLong();
 		long choiceIndex = Objects.requireNonNull(event.getOption("choice_index")).getAsLong();
 		String userId = event.getUser().getId();
-		String responseMessage = "Vote operation failed.";
-
+		String responseMessage = "Échec de l'enregistrement du vote.";
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
 		PollVoterRepository voterRepo = this.getBot().getRepositories().getRepository(PollVoterRepository.class);
-
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPollPresent = pollOpt.isPresent();
 
 		if (isPollPresent) {
 			PollRepository.Poll poll = pollOpt.get();
 			boolean isOpen = this.isEffectivelyOpen(poll);
-
 			if (isOpen) {
 				boolean canVote = false;
 				String mode = poll.getRestrictionMode();
 				boolean isNone = mode.equals("NONE");
 				boolean isWhitelist = mode.equals("WHITELIST");
 				boolean isBlacklist = mode.equals("BLACKLIST");
-
 				Member member = event.getMember();
 				boolean hasMember = member != null;
 
@@ -559,7 +580,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 						if (hasWhitelistedRole) {
 							canVote = true;
 						} else {
-							responseMessage = "You do not have a whitelisted role required to vote on this poll.";
+							responseMessage = "Tu n'as pas le rôle requis (liste blanche) pour voter à ce sondage.";
 						}
 					} else if (isBlacklist) {
 						boolean hasBlacklistedRole = false;
@@ -573,35 +594,59 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 						if (!hasBlacklistedRole) {
 							canVote = true;
 						} else {
-							responseMessage = "Your role is blacklisted from voting on this poll.";
+							responseMessage = "Ton rôle est sur liste noire pour ce sondage.";
 						}
 					}
 				} else {
-					responseMessage = "You must execute this command in a server to respect role restrictions.";
+					responseMessage = "Tu dois exécuter cette commande dans un serveur pour respecter les restrictions de rôle.";
 				}
 
 				if (canVote) {
 					Optional<PollChoiceRepository.PollChoice> choiceOpt = choiceRepo.findByPollIdAndLocalIndex(pollId,
 							choiceIndex);
 					boolean isChoicePresent = choiceOpt.isPresent();
+
 					if (isChoicePresent) {
 						boolean voteRegistered = voterRepo.recordVoteAttempt(pollId, userId);
 						if (voteRegistered) {
 							choiceRepo.incrementVote(pollId, choiceIndex);
-							responseMessage = "Vote recorded.";
+							responseMessage = "Vote enregistré avec succès.";
+
+							String receiptPayload = String.format("POLL_RECEIPT_V1|%d|%s", pollId, userId);
+							String signature = this.getBot().getCryptoReceiptService().signPayload(receiptPayload);
+
+							boolean hasSignature = !signature.isEmpty();
+							if (hasSignature) {
+								byte[] sigBytes = signature.getBytes(StandardCharsets.UTF_8);
+								FileUpload sigUpload = FileUpload.fromData(sigBytes, "receipt_" + pollId + ".sig");
+
+								event.getUser().openPrivateChannel().queue(
+										channel -> channel.sendMessage(
+												"Ton vote a bien été pris en compte pour le sondage " + pollId + ".\n" +
+														"Voici ton reçu cryptographique.\n" +
+														"Contenu du message signé : `" + receiptPayload + "`")
+												.addFiles(sigUpload).queue(
+														success -> {
+														},
+														error -> {
+														}),
+										error -> {
+										});
+							}
 						} else {
-							responseMessage = "You have already voted on this poll.";
+							responseMessage = "Tu as déjà voté à ce sondage.";
 						}
 					} else {
-						responseMessage = "Choice not found.";
+						responseMessage = "Choix introuvable.";
 					}
 				}
 			} else {
-				responseMessage = "This poll is closed.";
+				responseMessage = "Ce sondage est fermé.";
 			}
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -610,11 +655,12 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		OptionMapping publicOpt = event.getOption("public");
 		boolean isPublic = false;
 		boolean hasPublicOpt = publicOpt != null;
+
 		if (hasPublicOpt) {
 			isPublic = publicOpt.getAsBoolean();
 		}
 
-		String responseMessage = "Result retrieval failed.";
+		String responseMessage = "Échec de la récupération des résultats.";
 		boolean ephemeralResponse = true;
 		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
@@ -627,6 +673,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			boolean isAdmin = false;
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
+
 			if (hasMember) {
 				isAdmin = this.isAdmin(eventMember);
 			}
@@ -641,22 +688,24 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 
 				StringBuilder sb = new StringBuilder();
 				sb.append("**").append(poll.getTitle()).append("**\n");
-				sb.append("Total votes: ").append(totalSum).append("\n\n");
+				sb.append("Total des votes : ").append(totalSum).append("\n\n");
+
 				for (PollChoiceRepository.PollChoice c : choices) {
-					sb.append(c.getLocalIndex()).append(" - ").append(c.getChoiceText()).append(": ")
+					sb.append(c.getLocalIndex()).append(" - ").append(c.getChoiceText()).append(" : ")
 							.append(c.getVotesCount()).append(" votes\n");
 				}
-
 				responseMessage = sb.toString();
+
 				if (isPublic) {
 					ephemeralResponse = false;
 				}
 			} else {
-				responseMessage = "You do not have permission to view these results.";
+				responseMessage = "Tu n'as pas la permission de voir ces résultats.";
 			}
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(ephemeralResponse).queue();
 	}
 
@@ -665,7 +714,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		event.deferReply(true).queue();
 
 		java.util.concurrent.CompletableFuture.runAsync(() -> {
-			String errorMessage = "Export failed.";
+			String errorMessage = "Échec de l'exportation.";
 			boolean success = false;
 			FileUpload uploadData = null;
 			PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
@@ -680,6 +729,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				boolean isAdmin = false;
 				Member eventMember = event.getMember();
 				boolean hasMember = eventMember != null;
+
 				if (hasMember) {
 					isAdmin = this.isAdmin(eventMember);
 				}
@@ -694,18 +744,18 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 					}
 
 					StringBuilder txtBuilder = new StringBuilder();
-					txtBuilder.append("Poll ID: ").append(pollId).append("\n");
-					txtBuilder.append("Total Votes: ").append(totalSum).append("\n\n");
-					txtBuilder.append("Results:\n");
-
+					txtBuilder.append("ID du sondage : ").append(pollId).append("\n");
+					txtBuilder.append("Total des votes : ").append(totalSum).append("\n\n");
+					txtBuilder.append("Résultats :\n");
 					for (PollChoiceRepository.PollChoice c : choices) {
-						txtBuilder.append("- ").append(c.getChoiceText()).append(": ").append(c.getVotesCount())
+						txtBuilder.append("- ").append(c.getChoiceText()).append(" : ").append(c.getVotesCount())
 								.append(" votes\n");
 					}
 
-					txtBuilder.append("\nUsers who voted:\n");
+					txtBuilder.append("\nUtilisateurs ayant voté :\n");
 					Guild guild = event.getGuild();
 					boolean hasGuild = guild != null;
+
 					for (PollVoterRepository.PollVoter v : voters) {
 						String identity = v.getUserId();
 						if (hasGuild) {
@@ -721,25 +771,24 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 								} catch (Exception ignored) {
 								}
 							}
-						}
-						boolean identityIsStillIdAfterMember = identity.equals(v.getUserId());
-						if (identityIsStillIdAfterMember) {
-							try {
-								identity = event.getJDA().retrieveUserById(v.getUserId()).complete().getName();
-							} catch (Exception ignored) {
+							boolean identityIsStillIdAfterMember = identity.equals(v.getUserId());
+							if (identityIsStillIdAfterMember) {
+								try {
+									identity = event.getJDA().retrieveUserById(v.getUserId()).complete().getName();
+								} catch (Exception ignored) {
+								}
 							}
 						}
 						txtBuilder.append(identity).append("\n");
 					}
-
 					byte[] bytes = txtBuilder.toString().getBytes(StandardCharsets.UTF_8);
 					uploadData = FileUpload.fromData(bytes, "poll_" + pollId + "_export.txt");
 					success = true;
 				} else {
-					errorMessage = "You do not have permission to export this poll.";
+					errorMessage = "Tu n'as pas la permission d'exporter ce sondage.";
 				}
 			} else {
-				errorMessage = "Poll not found.";
+				errorMessage = "Sondage introuvable.";
 			}
 
 			if (success) {
@@ -754,7 +803,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		String text = Objects.requireNonNull(event.getOption("text")).getAsString();
 		boolean anonymous = Objects.requireNonNull(event.getOption("anonymous")).getAsBoolean();
-		String responseMessage = "Comment operation failed.";
+		String responseMessage = "Échec de l'ajout du commentaire.";
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -766,13 +815,15 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			} else {
 				userIdParam = null;
 			}
+
 			PollCommentRepository commentRepo = this.getBot().getRepositories()
 					.getRepository(PollCommentRepository.class);
 			commentRepo.insert(new PollCommentRepository.PollComment(0, pollId, userIdParam, text, anonymous));
-			responseMessage = "Comment added successfully.";
+			responseMessage = "Commentaire ajouté avec succès.";
 		} else {
-			responseMessage = "Poll not found.";
+			responseMessage = "Sondage introuvable.";
 		}
+
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -781,7 +832,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		event.deferReply(true).queue();
 
 		java.util.concurrent.CompletableFuture.runAsync(() -> {
-			String errorMessage = "Comment export failed.";
+			String errorMessage = "Échec de l'exportation des commentaires.";
 			boolean success = false;
 			FileUpload uploadData = null;
 			PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
@@ -794,6 +845,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				boolean isAdmin = false;
 				Member eventMember = event.getMember();
 				boolean hasMember = eventMember != null;
+
 				if (hasMember) {
 					isAdmin = this.isAdmin(eventMember);
 				}
@@ -805,9 +857,8 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 					List<PollCommentRepository.PollComment> comments = commentRepo.findByPollId(pollId);
 					Guild guild = event.getGuild();
 					boolean hasGuild = guild != null;
-
 					StringBuilder tsvBuilder = new StringBuilder();
-					tsvBuilder.append("User\tComment\n");
+					tsvBuilder.append("Utilisateur\tCommentaire\n");
 
 					for (PollCommentRepository.PollComment c : comments) {
 						String identity = "Anonyme";
@@ -828,29 +879,27 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 									} catch (Exception ignored) {
 									}
 								}
-							}
-							boolean identityIsStillIdAfterMember = identity.equals(c.getUserId());
-							if (identityIsStillIdAfterMember) {
-								try {
-									identity = event.getJDA().retrieveUserById(c.getUserId()).complete().getName();
-								} catch (Exception ignored) {
+								boolean identityIsStillIdAfterMember = identity.equals(c.getUserId());
+								if (identityIsStillIdAfterMember) {
+									try {
+										identity = event.getJDA().retrieveUserById(c.getUserId()).complete().getName();
+									} catch (Exception ignored) {
+									}
 								}
 							}
 						}
-
 						String safeComment = c.getCommentText().replace("\n", " ").replace("\t", " ");
 						String safeIdentity = identity.replace("\n", " ").replace("\t", " ");
 						tsvBuilder.append(safeIdentity).append("\t").append(safeComment).append("\n");
 					}
-
 					byte[] bytes = tsvBuilder.toString().getBytes(StandardCharsets.UTF_8);
 					uploadData = FileUpload.fromData(bytes, "poll_" + pollId + "_comments.tsv");
 					success = true;
 				} else {
-					errorMessage = "You do not have permission to export comments for this poll.";
+					errorMessage = "Tu n'as pas la permission d'exporter les commentaires de ce sondage.";
 				}
 			} else {
-				errorMessage = "Poll not found.";
+				errorMessage = "Sondage introuvable.";
 			}
 
 			if (success) {
@@ -859,5 +908,57 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				event.getHook().sendMessage(errorMessage).queue();
 			}
 		});
+	}
+
+	private void handlePublicKey(SlashCommandInteractionEvent event) {
+		event.deferReply(true).queue();
+		boolean isSuccess = false;
+		String errorMessage = "Échec de la récupération de la clé publique.";
+
+		try {
+			FileUpload keyUpload = FileUpload.fromData(this.getBot().getCryptoReceiptService().getPublicKeyFile(),
+					"public.pem");
+			event.getHook().sendMessage("Voici la clé publique du serveur (format Ed25519 X.509 PEM) :")
+					.addFiles(keyUpload)
+					.queue();
+			isSuccess = true;
+		} catch (Exception e) {
+			isSuccess = false;
+		}
+
+		if (!isSuccess) {
+			event.getHook().sendMessage(errorMessage).queue();
+		}
+	}
+
+	private void handleRegenerateKeys(SlashCommandInteractionEvent event) {
+		String responseMessage = "Opération impossible : membre introuvable.";
+		Member member = event.getMember();
+		boolean hasMember = member != null;
+
+		if (hasMember) {
+			boolean isAdmin = this.isAdmin(member);
+			if (isAdmin) {
+				boolean success = false;
+				try {
+					this.getBot().getCryptoReceiptService().forceGenerateKeys();
+					success = true;
+				} catch (Exception ignored) {
+					success = false;
+				}
+
+				if (success) {
+					responseMessage = "Nouvelle paire de clés générée et sauvegardée avec succès.";
+				}
+				if (!success) {
+					responseMessage = "Erreur lors de la génération ou de la sauvegarde des clés.";
+				}
+			}
+			if (!isAdmin) {
+				responseMessage = "Tu n'as pas la permission d'exécuter cette commande.";
+			}
+		}
+
+		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 }
