@@ -182,3 +182,8 @@ dev.config.json
 
 null
 data/
+
+# Cryptographie et reçus de sondages
+keys/
+*.pem
+*.sig
