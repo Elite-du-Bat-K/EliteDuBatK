@@ -13,6 +13,7 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
@@ -21,6 +22,11 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.textinput.TextInput;
+import net.dv8tion.jda.api.components.textinput.TextInputStyle;
+import net.dv8tion.jda.api.modals.Modal;
+import net.dv8tion.jda.api.components.label.Label;
 import net.dv8tion.jda.api.utils.FileUpload;
 import org.jetbrains.annotations.NotNull;
 
@@ -33,6 +39,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class PollCommand extends AbstractCommandWithAutocomplete {
+
 	public PollCommand(Bot bot) {
 		super(bot);
 	}
@@ -41,9 +48,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 	@Override
 	public SlashCommandData getCommandInformation() {
 		SubcommandData createData = new SubcommandData("create", "Créer un nouveau sondage")
-				.addOption(OptionType.STRING, "title", "Titre du sondage", true)
-				.addOption(OptionType.STRING, "description", "Description du sondage", true)
-				.addOption(OptionType.STRING, "choices", "Choix séparés par | (ex: Oui|Non)", true)
 				.addOption(OptionType.INTEGER, "duration_minutes", "Durée du sondage en minutes (optionnel)", false);
 
 		SubcommandData closeData = new SubcommandData("close", "Fermer un sondage")
@@ -62,7 +66,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 
 		SubcommandData commentData = new SubcommandData("comment", "Ajouter un commentaire")
 				.addOption(OptionType.INTEGER, "id", "ID du sondage", true, true)
-				.addOption(OptionType.STRING, "text", "Texte du commentaire", true)
 				.addOption(OptionType.BOOLEAN, "anonymous", "Masquer ton identité", true);
 
 		SubcommandData exportCommentsData = new SubcommandData("export_comments",
@@ -172,15 +175,34 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 	}
 
 	@Override
+	public void onModal(ModalInteractionEvent event) {
+		String modalId = event.getModalId();
+		boolean isCreate = modalId.startsWith("poll_create|");
+		boolean isComment = modalId.startsWith("poll_comment|");
+
+		if (isCreate) {
+			String[] parts = modalId.split("\\|");
+			this.processCreateModal(event, parts[1]);
+		} else if (isComment) {
+			String[] parts = modalId.split("\\|");
+			this.processCommentModal(event, parts[1], parts[2]);
+		} else {
+			event.reply("Action de formulaire inconnue.").setEphemeral(true).queue();
+		}
+	}
+
+	@Override
 	public void autocomplete(CommandAutoCompleteInteractionEvent event) {
 		String focusedOption = event.getFocusedOption().getName();
 		boolean isPollIdOption = focusedOption.equals("poll_id") || focusedOption.equals("id");
 		boolean isChoiceIndexOption = focusedOption.equals("choice_index");
+
 		List<Command.Choice> choices = new ArrayList<>();
 
 		if (isPollIdOption) {
 			PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 			List<PollRepository.Poll> polls = pollRepo.findAll();
+
 			for (PollRepository.Poll p : polls) {
 				boolean isEligible = this.isEffectivelyOpen(p) || event.getSubcommandName().equals("results")
 						|| event.getSubcommandName().equals("export")
@@ -190,16 +212,16 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 					choices.add(new Command.Choice(p.getTitle(), p.getId()));
 				}
 			}
-		}
-
-		if (isChoiceIndexOption) {
+		} else if (isChoiceIndexOption) {
 			OptionMapping pollIdMapping = event.getOption("poll_id");
 			boolean hasPollId = pollIdMapping != null;
+
 			if (hasPollId) {
 				long pollId = pollIdMapping.getAsLong();
 				PollChoiceRepository choiceRepo = this.getBot().getRepositories()
 						.getRepository(PollChoiceRepository.class);
 				List<PollChoiceRepository.PollChoice> pollChoices = choiceRepo.findByPollId(pollId);
+
 				for (PollChoiceRepository.PollChoice c : pollChoices) {
 					choices.add(new Command.Choice(c.getChoiceText(), c.getLocalIndex()));
 				}
@@ -221,6 +243,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 	private boolean isEffectivelyOpen(PollRepository.Poll poll) {
 		boolean isOpen = false;
 		boolean isManuallyOpen = poll.isOpen();
+
 		if (isManuallyOpen) {
 			boolean hasClosesAt = poll.getClosesAt() != null;
 			if (hasClosesAt) {
@@ -237,25 +260,58 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 	}
 
 	private void handleCreate(SlashCommandInteractionEvent event) {
-		String title = Objects.requireNonNull(event.getOption("title")).getAsString();
-		String description = Objects.requireNonNull(event.getOption("description")).getAsString();
-		String choicesRaw = Objects.requireNonNull(event.getOption("choices")).getAsString();
 		OptionMapping durationOpt = event.getOption("duration_minutes");
-		Long closesAt = null;
+		String durationStr = "-1";
 		boolean hasDuration = durationOpt != null;
 
 		if (hasDuration) {
-			long durationMs = durationOpt.getAsLong() * 60L * 1000L;
+			durationStr = String.valueOf(durationOpt.getAsLong());
+		}
+
+		TextInput titleInput = TextInput.create("title", TextInputStyle.SHORT)
+				.setRequired(true)
+				.build();
+
+		TextInput descInput = TextInput.create("description", TextInputStyle.PARAGRAPH)
+				.setRequired(true)
+				.build();
+
+		TextInput choicesInput = TextInput.create("choices", TextInputStyle.PARAGRAPH)
+				.setPlaceholder("Exemple de choix:\nOui, tout à fait\nNon, pas du tout\nJe ne sais pas")
+				.setRequired(true)
+				.build();
+
+		Modal modal = Modal.create("poll_create|" + durationStr, "Création de sondage")
+				.addComponents(
+						Label.of("Titre du sondage", titleInput),
+						Label.of("Description du sondage", descInput),
+						Label.of("Options (1 par ligne obligatoire, 2 min)", choicesInput))
+				.build();
+
+		event.replyModal(modal).queue();
+	}
+
+	private void processCreateModal(ModalInteractionEvent event, String durationStr) {
+		String responseMessage = "Échec de la création du sondage.";
+		String title = event.getValue("title").getAsString();
+		String description = event.getValue("description").getAsString();
+		String choicesRaw = event.getValue("choices").getAsString();
+
+		Long closesAt = null;
+		boolean hasDuration = !durationStr.equals("-1");
+
+		if (hasDuration) {
+			long durationMs = Long.parseLong(durationStr) * 60L * 1000L;
 			closesAt = Instant.now().atZone(ZoneOffset.UTC).toInstant().toEpochMilli() + durationMs;
 		}
 
-		String responseMessage = "Échec de la création du sondage.";
-		String[] choices = choicesRaw.split("\\|");
+		String[] choices = choicesRaw.split("\\r?\\n");
 		boolean hasValidChoices = choices.length >= 2;
 
 		if (hasValidChoices) {
 			PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 			PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
+
 			PollRepository.Poll newPoll = new PollRepository.Poll(0, title, description, true, event.getUser().getId(),
 					closesAt, "NONE");
 			pollRepo.insert(newPoll);
@@ -263,6 +319,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			long pollId = 0L;
 			List<PollRepository.Poll> allPolls = pollRepo.findAll();
 			long latestId = 0L;
+
 			for (PollRepository.Poll p : allPolls) {
 				boolean isLater = p.getId() > latestId;
 				if (isLater) {
@@ -270,6 +327,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				}
 			}
 			pollId = latestId;
+
 			long localIndex = 1L;
 			for (String c : choices) {
 				String cleanChoice = c.trim();
@@ -281,15 +339,60 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			}
 			responseMessage = "Sondage créé avec succès avec l'ID " + pollId;
 		} else {
-			responseMessage = "Tu dois fournir au moins deux choix séparés par |";
+			responseMessage = "Tu dois fournir au moins deux choix séparés par un retour à la ligne.";
 		}
 
 		event.reply(responseMessage).queue();
 	}
 
+	private void handleComment(SlashCommandInteractionEvent event) {
+		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
+		boolean anonymous = Objects.requireNonNull(event.getOption("anonymous")).getAsBoolean();
+
+		TextInput textInput = TextInput.create("text", TextInputStyle.PARAGRAPH)
+				.setRequired(true)
+				.build();
+
+		Modal modal = Modal.create("poll_comment|" + pollId + "|" + anonymous, "Ajouter un commentaire")
+				.addComponents(Label.of("Texte du commentaire", textInput))
+				.build();
+
+		event.replyModal(modal).queue();
+	}
+
+	private void processCommentModal(ModalInteractionEvent event, String pollIdStr, String anonymousStr) {
+		long pollId = Long.parseLong(pollIdStr);
+		boolean anonymous = Boolean.parseBoolean(anonymousStr);
+		String text = event.getValue("text").getAsString();
+		String responseMessage = "Échec de l'ajout du commentaire.";
+
+		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
+		boolean isPresent = pollOpt.isPresent();
+
+		if (isPresent) {
+			String userIdParam = "";
+			if (!anonymous) {
+				userIdParam = event.getUser().getId();
+			} else {
+				userIdParam = null;
+			}
+
+			PollCommentRepository commentRepo = this.getBot().getRepositories()
+					.getRepository(PollCommentRepository.class);
+			commentRepo.insert(new PollCommentRepository.PollComment(0, pollId, userIdParam, text, anonymous));
+			responseMessage = "Commentaire ajouté avec succès.";
+		} else {
+			responseMessage = "Sondage introuvable.";
+		}
+
+		event.reply(responseMessage).setEphemeral(true).queue();
+	}
+
 	private void handleClose(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		String responseMessage = "Échec de l'opération de fermeture.";
+
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -298,6 +401,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			PollRepository.Poll p = pollOpt.get();
 			boolean isCreator = p.getCreatorId().equals(event.getUser().getId());
 			boolean isAdmin = false;
+
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
 
@@ -317,13 +421,13 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		} else {
 			responseMessage = "Sondage introuvable.";
 		}
-
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
 	private void handleDelete(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		String responseMessage = "Échec de la suppression.";
+
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -332,6 +436,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			PollRepository.Poll p = pollOpt.get();
 			boolean isCreator = p.getCreatorId().equals(event.getUser().getId());
 			boolean isAdmin = false;
+
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
 
@@ -354,13 +459,13 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		} else {
 			responseMessage = "Sondage introuvable.";
 		}
-
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
 	private void handleView(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		String responseMessage = "Échec de l'opération d'affichage.";
+
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -377,8 +482,8 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				long unixSeconds = p.getClosesAt() / 1000L;
 				sb.append("**Fermeture (UTC)** : <t:").append(unixSeconds).append(":F>\n");
 			}
-
 			sb.append("**Mode de restriction** : ").append(p.getRestrictionMode()).append("\n");
+
 			PollRoleRepository roleRepo = this.getBot().getRepositories().getRepository(PollRoleRepository.class);
 			List<PollRoleRepository.PollRole> roles = roleRepo.findByPollId(pollId);
 			boolean hasRoles = !roles.isEmpty();
@@ -392,8 +497,10 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			}
 
 			sb.append("\n**Choix** :\n");
-			PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
+			PollChoiceRepository choiceRepo = this.getBot().getRepositories()
+					.getRepository(PollChoiceRepository.class);
 			List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
+
 			for (PollChoiceRepository.PollChoice c : choices) {
 				sb.append(c.getLocalIndex()).append(". ").append(c.getChoiceText()).append("\n");
 			}
@@ -401,7 +508,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		} else {
 			responseMessage = "Sondage introuvable.";
 		}
-
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -411,6 +517,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		OptionMapping forceOpt = event.getOption("force");
 		boolean force = forceOpt != null && forceOpt.getAsBoolean();
 		String responseMessage = "Échec de la mise à jour de la restriction.";
+
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -419,6 +526,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			PollRepository.Poll p = pollOpt.get();
 			boolean isCreator = p.getCreatorId().equals(event.getUser().getId());
 			boolean isAdmin = false;
+
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
 
@@ -441,6 +549,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 									.deleteByPollId(pollId);
 						}
 					}
+
 					if (proceed) {
 						PollRepository.Poll updatedPoll = new PollRepository.Poll(p.getId(), p.getTitle(),
 								p.getDescription(), p.isOpen(), p.getCreatorId(), p.getClosesAt(), modeInput);
@@ -456,7 +565,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		} else {
 			responseMessage = "Sondage introuvable.";
 		}
-
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -464,6 +572,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		Role targetRole = Objects.requireNonNull(event.getOption("role")).getAsRole();
 		String responseMessage = "Échec de l'ajout du rôle.";
+
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -472,6 +581,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			PollRepository.Poll p = pollOpt.get();
 			boolean isCreator = p.getCreatorId().equals(event.getUser().getId());
 			boolean isAdmin = false;
+
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
 
@@ -496,7 +606,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		} else {
 			responseMessage = "Sondage introuvable.";
 		}
-
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -504,6 +613,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		Role targetRole = Objects.requireNonNull(event.getOption("role")).getAsRole();
 		String responseMessage = "Échec de la suppression du rôle.";
+
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
@@ -512,6 +622,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			PollRepository.Poll p = pollOpt.get();
 			boolean isCreator = p.getCreatorId().equals(event.getUser().getId());
 			boolean isAdmin = false;
+
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
 
@@ -521,7 +632,8 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 
 			boolean canModify = isCreator || isAdmin;
 			if (canModify) {
-				PollRoleRepository roleRepo = this.getBot().getRepositories().getRepository(PollRoleRepository.class);
+				PollRoleRepository roleRepo = this.getBot().getRepositories()
+						.getRepository(PollRoleRepository.class);
 				boolean deleted = roleRepo.deleteByPollIdAndRoleId(pollId, targetRole.getId());
 				if (deleted) {
 					responseMessage = "Rôle retiré avec succès de la liste de restriction du sondage.";
@@ -534,7 +646,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		} else {
 			responseMessage = "Sondage introuvable.";
 		}
-
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -543,21 +654,25 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		long choiceIndex = Objects.requireNonNull(event.getOption("choice_index")).getAsLong();
 		String userId = event.getUser().getId();
 		String responseMessage = "Échec de l'enregistrement du vote.";
+
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
 		PollVoterRepository voterRepo = this.getBot().getRepositories().getRepository(PollVoterRepository.class);
+
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPollPresent = pollOpt.isPresent();
 
 		if (isPollPresent) {
 			PollRepository.Poll poll = pollOpt.get();
 			boolean isOpen = this.isEffectivelyOpen(poll);
+
 			if (isOpen) {
 				boolean canVote = false;
 				String mode = poll.getRestrictionMode();
 				boolean isNone = mode.equals("NONE");
 				boolean isWhitelist = mode.equals("WHITELIST");
 				boolean isBlacklist = mode.equals("BLACKLIST");
+
 				Member member = event.getMember();
 				boolean hasMember = member != null;
 
@@ -614,17 +729,16 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 
 							String receiptPayload = String.format("POLL_RECEIPT_V1|%d|%s", pollId, userId);
 							String signature = this.getBot().getCryptoReceiptService().signPayload(receiptPayload);
-
 							boolean hasSignature = !signature.isEmpty();
+
 							if (hasSignature) {
 								byte[] sigBytes = signature.getBytes(StandardCharsets.UTF_8);
 								FileUpload sigUpload = FileUpload.fromData(sigBytes, "receipt_" + pollId + ".sig");
-
 								event.getUser().openPrivateChannel().queue(
 										channel -> channel.sendMessage(
-												"Ton vote a bien été pris en compte pour le sondage " + pollId + ".\n" +
-														"Voici ton reçu cryptographique.\n" +
-														"Contenu du message signé : `" + receiptPayload + "`")
+												"Ton vote a bien été pris en compte pour le sondage " + pollId + ".\n"
+														+ "Voici ton reçu cryptographique.\n"
+														+ "Contenu du message signé : `" + receiptPayload + "`")
 												.addFiles(sigUpload).queue(
 														success -> {
 														},
@@ -646,7 +760,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		} else {
 			responseMessage = "Sondage introuvable.";
 		}
-
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
@@ -662,8 +775,10 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 
 		String responseMessage = "Échec de la récupération des résultats.";
 		boolean ephemeralResponse = true;
+
 		PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
 		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+
 		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 		boolean isPresent = pollOpt.isPresent();
 
@@ -671,6 +786,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			PollRepository.Poll poll = pollOpt.get();
 			boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
 			boolean isAdmin = false;
+
 			Member eventMember = event.getMember();
 			boolean hasMember = eventMember != null;
 
@@ -695,7 +811,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 							.append(c.getVotesCount()).append(" votes\n");
 				}
 				responseMessage = sb.toString();
-
 				if (isPublic) {
 					ephemeralResponse = false;
 				}
@@ -705,7 +820,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		} else {
 			responseMessage = "Sondage introuvable.";
 		}
-
 		event.reply(responseMessage).setEphemeral(ephemeralResponse).queue();
 	}
 
@@ -717,9 +831,11 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			String errorMessage = "Échec de l'exportation.";
 			boolean success = false;
 			FileUpload uploadData = null;
+
 			PollChoiceRepository choiceRepo = this.getBot().getRepositories().getRepository(PollChoiceRepository.class);
 			PollVoterRepository voterRepo = this.getBot().getRepositories().getRepository(PollVoterRepository.class);
 			PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
+
 			Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 			boolean isPresent = pollOpt.isPresent();
 
@@ -727,6 +843,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				PollRepository.Poll poll = pollOpt.get();
 				boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
 				boolean isAdmin = false;
+
 				Member eventMember = event.getMember();
 				boolean hasMember = eventMember != null;
 
@@ -738,6 +855,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				if (hasPermission) {
 					List<PollChoiceRepository.PollChoice> choices = choiceRepo.findByPollId(pollId);
 					List<PollVoterRepository.PollVoter> voters = voterRepo.findByPollId(pollId);
+
 					long totalSum = 0L;
 					for (PollChoiceRepository.PollChoice c : choices) {
 						totalSum = totalSum + c.getVotesCount();
@@ -747,6 +865,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 					txtBuilder.append("ID du sondage : ").append(pollId).append("\n");
 					txtBuilder.append("Total des votes : ").append(totalSum).append("\n\n");
 					txtBuilder.append("Résultats :\n");
+
 					for (PollChoiceRepository.PollChoice c : choices) {
 						txtBuilder.append("- ").append(c.getChoiceText()).append(" : ").append(c.getVotesCount())
 								.append(" votes\n");
@@ -764,23 +883,26 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 							if (isMemberPresent) {
 								identity = m.getEffectiveName();
 							}
-							boolean identityIsStillId = identity.equals(v.getUserId());
-							if (identityIsStillId && hasGuild) {
-								try {
-									identity = guild.retrieveMemberById(v.getUserId()).complete().getEffectiveName();
-								} catch (Exception ignored) {
-								}
+						}
+
+						boolean identityIsStillId = identity.equals(v.getUserId());
+						if (identityIsStillId && hasGuild) {
+							try {
+								identity = guild.retrieveMemberById(v.getUserId()).complete().getEffectiveName();
+							} catch (Exception ignored) {
 							}
-							boolean identityIsStillIdAfterMember = identity.equals(v.getUserId());
-							if (identityIsStillIdAfterMember) {
-								try {
-									identity = event.getJDA().retrieveUserById(v.getUserId()).complete().getName();
-								} catch (Exception ignored) {
-								}
+						}
+
+						boolean identityIsStillIdAfterMember = identity.equals(v.getUserId());
+						if (identityIsStillIdAfterMember) {
+							try {
+								identity = event.getJDA().retrieveUserById(v.getUserId()).complete().getName();
+							} catch (Exception ignored) {
 							}
 						}
 						txtBuilder.append(identity).append("\n");
 					}
+
 					byte[] bytes = txtBuilder.toString().getBytes(StandardCharsets.UTF_8);
 					uploadData = FileUpload.fromData(bytes, "poll_" + pollId + "_export.txt");
 					success = true;
@@ -799,34 +921,6 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 		});
 	}
 
-	private void handleComment(SlashCommandInteractionEvent event) {
-		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
-		String text = Objects.requireNonNull(event.getOption("text")).getAsString();
-		boolean anonymous = Objects.requireNonNull(event.getOption("anonymous")).getAsBoolean();
-		String responseMessage = "Échec de l'ajout du commentaire.";
-		PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
-		Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
-		boolean isPresent = pollOpt.isPresent();
-
-		if (isPresent) {
-			String userIdParam = "";
-			if (!anonymous) {
-				userIdParam = event.getUser().getId();
-			} else {
-				userIdParam = null;
-			}
-
-			PollCommentRepository commentRepo = this.getBot().getRepositories()
-					.getRepository(PollCommentRepository.class);
-			commentRepo.insert(new PollCommentRepository.PollComment(0, pollId, userIdParam, text, anonymous));
-			responseMessage = "Commentaire ajouté avec succès.";
-		} else {
-			responseMessage = "Sondage introuvable.";
-		}
-
-		event.reply(responseMessage).setEphemeral(true).queue();
-	}
-
 	private void handleExportComments(SlashCommandInteractionEvent event) {
 		long pollId = Objects.requireNonNull(event.getOption("id")).getAsLong();
 		event.deferReply(true).queue();
@@ -835,6 +929,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 			String errorMessage = "Échec de l'exportation des commentaires.";
 			boolean success = false;
 			FileUpload uploadData = null;
+
 			PollRepository pollRepo = this.getBot().getRepositories().getRepository(PollRepository.class);
 			Optional<PollRepository.Poll> pollOpt = pollRepo.findByPrimaryKey(pollId);
 			boolean isPresent = pollOpt.isPresent();
@@ -843,6 +938,7 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				PollRepository.Poll poll = pollOpt.get();
 				boolean isCreator = poll.getCreatorId().equals(event.getUser().getId());
 				boolean isAdmin = false;
+
 				Member eventMember = event.getMember();
 				boolean hasMember = eventMember != null;
 
@@ -857,12 +953,14 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 					List<PollCommentRepository.PollComment> comments = commentRepo.findByPollId(pollId);
 					Guild guild = event.getGuild();
 					boolean hasGuild = guild != null;
+
 					StringBuilder tsvBuilder = new StringBuilder();
 					tsvBuilder.append("Utilisateur\tCommentaire\n");
 
 					for (PollCommentRepository.PollComment c : comments) {
 						String identity = "Anonyme";
 						boolean isNotAnonymous = !c.isAnonymous() && c.getUserId() != null;
+
 						if (isNotAnonymous) {
 							identity = c.getUserId();
 							if (hasGuild) {
@@ -871,27 +969,31 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 								if (isMemberPresent) {
 									identity = m.getEffectiveName();
 								}
-								boolean identityIsStillId = identity.equals(c.getUserId());
-								if (identityIsStillId && hasGuild) {
-									try {
-										identity = guild.retrieveMemberById(c.getUserId()).complete()
-												.getEffectiveName();
-									} catch (Exception ignored) {
-									}
+							}
+
+							boolean identityIsStillId = identity.equals(c.getUserId());
+							if (identityIsStillId && hasGuild) {
+								try {
+									identity = guild.retrieveMemberById(c.getUserId()).complete()
+											.getEffectiveName();
+								} catch (Exception ignored) {
 								}
-								boolean identityIsStillIdAfterMember = identity.equals(c.getUserId());
-								if (identityIsStillIdAfterMember) {
-									try {
-										identity = event.getJDA().retrieveUserById(c.getUserId()).complete().getName();
-									} catch (Exception ignored) {
-									}
+							}
+
+							boolean identityIsStillIdAfterMember = identity.equals(c.getUserId());
+							if (identityIsStillIdAfterMember) {
+								try {
+									identity = event.getJDA().retrieveUserById(c.getUserId()).complete().getName();
+								} catch (Exception ignored) {
 								}
 							}
 						}
+
 						String safeComment = c.getCommentText().replace("\n", " ").replace("\t", " ");
 						String safeIdentity = identity.replace("\n", " ").replace("\t", " ");
 						tsvBuilder.append(safeIdentity).append("\t").append(safeComment).append("\n");
 					}
+
 					byte[] bytes = tsvBuilder.toString().getBytes(StandardCharsets.UTF_8);
 					uploadData = FileUpload.fromData(bytes, "poll_" + pollId + "_comments.tsv");
 					success = true;
@@ -950,15 +1052,16 @@ public class PollCommand extends AbstractCommandWithAutocomplete {
 				if (success) {
 					responseMessage = "Nouvelle paire de clés générée et sauvegardée avec succès.";
 				}
+
 				if (!success) {
 					responseMessage = "Erreur lors de la génération ou de la sauvegarde des clés.";
 				}
 			}
+
 			if (!isAdmin) {
 				responseMessage = "Tu n'as pas la permission d'exécuter cette commande.";
 			}
 		}
-
 		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 }
