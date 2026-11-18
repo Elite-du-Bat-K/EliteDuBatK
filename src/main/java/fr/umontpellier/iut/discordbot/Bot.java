@@ -8,6 +8,7 @@ import fr.umontpellier.iut.discordbot.services.CryptoReceiptService;
 import fr.umontpellier.iut.discordbot.services.LogSender;
 import fr.umontpellier.iut.discordbot.services.MessageCacheService;
 import fr.umontpellier.iut.discordbot.services.ServiceStatusMonitor;
+import fr.umontpellier.iut.discordbot.studysuite.ReminderStreamService;
 import fr.umontpellier.iut.discordbot.studysuite.StudySuiteClient;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -36,6 +37,8 @@ public class Bot implements Runnable {
 	private final LogSender logSender;
 	@NotNull
 	private final StudySuiteClient studySuite;
+
+	private final ReminderStreamService reminderStream;
 	@NotNull
 	private final MessageCacheService messageCacheService;
 	@NotNull
@@ -51,6 +54,7 @@ public class Bot implements Runnable {
 		events = new EventManager(this);
 		logSender = new LogSender(this);
 		studySuite = new StudySuiteClient(config.get().getStudySuite());
+		reminderStream = new ReminderStreamService(this);
 		messageCacheService = new MessageCacheService(repositories.getCachedMessageRepository(), MAX_CACHED_MESSAGES);
 		messageCacheService.initialize();
 		statusMonitor = new ServiceStatusMonitor(config.get().getStatusTargets(), config.get().getStatusInterval());
@@ -101,6 +105,10 @@ public class Bot implements Runnable {
 	@NotNull
 	public StudySuiteClient getStudySuite() {
 		return studySuite;
+	}
+
+	public ReminderStreamService getReminderStream() {
+		return reminderStream;
 	}
 
 	@NotNull

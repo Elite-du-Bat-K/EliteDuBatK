@@ -19,6 +19,8 @@ public class ReadyEventListener extends AbstractEventListener {
 		logger.info("Bot is ready !");
 
 		getBot().getCommandManager().registerCommands(event.getJDA());
+		// Après JDA : les rappels reçus sont envoyés en message privé tout de suite.
+		getBot().getReminderStream().start();
 
 		Runnable updateActivity = () -> {
 			this.logger.info("Updating activity...");
