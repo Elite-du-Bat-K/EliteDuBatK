@@ -88,14 +88,21 @@ public class StudySuiteClient {
         return new GroupHierarchy(getGroups());
     }
 
+    /**
+     * Les horaires des cours sont demandés avec le décalage de Paris ({@code 2026-09-14T08:00:00.000+02:00}) : c'est
+     * le seul format qui désigne le même instant avant et après le passage de l'API aux vrais instants (migration
+     * 0017), alors que le format par défaut change de sens.
+     */
+    private static final String EVENT_DATE_FORMAT = "&dateFormat=iso-offset";
+
     /** Les cours d'un jour, tous groupes confondus. */
     public List<StudyEvent> getDayEvents(LocalDate date) {
-        return getData("/api/events/day?date=" + date, new TypeToken<List<StudyEvent>>() {}.getType());
+        return getData("/api/events/day?date=" + date + EVENT_DATE_FORMAT, new TypeToken<List<StudyEvent>>() {}.getType());
     }
 
     /** Les cours de la semaine (du lundi au dimanche) contenant {@code date}, tous groupes confondus. */
     public List<StudyEvent> getWeekEvents(LocalDate date) {
-        return getData("/api/events/week?date=" + date, new TypeToken<List<StudyEvent>>() {}.getType());
+        return getData("/api/events/week?date=" + date + EVENT_DATE_FORMAT, new TypeToken<List<StudyEvent>>() {}.getType());
     }
 
     /** Les rôles Discord de ce serveur associés à un groupe. Vide sans clé d'API. */

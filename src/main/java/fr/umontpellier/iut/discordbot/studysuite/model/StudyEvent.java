@@ -2,17 +2,16 @@ package fr.umontpellier.iut.discordbot.studysuite.model;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.List;
 
 /**
  * Un cours du planning.
  * <p>
- * {@code startDate} et {@code endDate} sont l'heure de Paris affichée sur le planning, étiquetée UTC : un cours à
- * 10h00 arrive en {@code 10:00:00.000Z}. On les relit donc en UTC pour retrouver l'heure affichée, sans jamais les
- * convertir vers Europe/Paris (ce qui décalerait d'une ou deux heures). Pour un vrai instant (timestamps Discord),
- * c'est l'inverse : l'heure affichée est une heure de Paris, voir {@link #startInstant()}.
+ * {@code startDate} et {@code endDate} portent le décalage de Paris ({@code dateFormat=iso-offset}) : un cours à
+ * 10h00 arrive en {@code 10:00:00.000+02:00} l'été, {@code +01:00} l'hiver. Ils donnent donc à la fois l'heure
+ * affichée sur le planning ({@link #start()}) et le vrai instant ({@link #startInstant()}).
  */
 public record StudyEvent(
         String id,
@@ -31,21 +30,21 @@ public record StudyEvent(
     public record Teacher(String id, String firstName, String lastName) {
     }
 
+    /** L'heure de Paris affichée sur le planning. */
     public LocalDateTime start() {
-        return wallClock(startDate);
+        return parisTime(startDate);
     }
 
     public LocalDateTime end() {
-        return wallClock(endDate);
+        return parisTime(endDate);
     }
 
-    /** L'instant réel du début : l'heure affichée, lue comme une heure de Paris. */
     public Instant startInstant() {
-        return start().atZone(PARIS).toInstant();
+        return OffsetDateTime.parse(startDate).toInstant();
     }
 
     public Instant endInstant() {
-        return end().atZone(PARIS).toInstant();
+        return OffsetDateTime.parse(endDate).toInstant();
     }
 
     public List<Room> rooms() {
@@ -60,7 +59,8 @@ public record StudyEvent(
         return groups == null ? List.of() : groups;
     }
 
-    private static LocalDateTime wallClock(String label) {
-        return LocalDateTime.ofInstant(Instant.parse(label), ZoneOffset.UTC);
+    /** Converti vers Paris plutôt que lu tel quel, pour rester juste si l'API renvoyait un autre décalage. */
+    private static LocalDateTime parisTime(String date) {
+        return OffsetDateTime.parse(date).atZoneSameInstant(PARIS).toLocalDateTime();
     }
 }
