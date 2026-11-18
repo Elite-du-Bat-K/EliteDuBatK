@@ -1,9 +1,7 @@
 package fr.umontpellier.iut.discordbot.database.dataobjects;
 
-import java.util.UUID;
-
 public class DirectoryEntry extends AbstractDataObject {
-	private UUID id;
+	private long id;
 	private String lastName;
 	private String firstName;
 	private String email;
@@ -12,7 +10,7 @@ public class DirectoryEntry extends AbstractDataObject {
 	private Long discordUserId;
 
 	public DirectoryEntry() {
-		this.id = UUID.randomUUID();
+		this.id = 0L;
 		this.lastName = "";
 		this.firstName = null;
 		this.email = "";
@@ -21,11 +19,11 @@ public class DirectoryEntry extends AbstractDataObject {
 		this.discordUserId = null;
 	}
 
-	public UUID getId() {
+	public long getId() {
 		return id;
 	}
 
-	public void setId(UUID id) {
+	public void setId(long id) {
 		this.id = id;
 	}
 

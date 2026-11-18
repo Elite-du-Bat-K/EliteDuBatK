@@ -4,15 +4,37 @@ import fr.umontpellier.iut.discordbot.database.DatabaseConnection;
 import fr.umontpellier.iut.discordbot.database.dataobjects.DirectoryEntry;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
 public class DirectoryRepository extends AbstractRepository<DirectoryEntry> {
+	public DirectoryRepository(DatabaseConnection db) {
+		super(db);
+		this.createTableIfNotExists();
+	}
 
-	public DirectoryRepository(DatabaseConnection connection) {
-		super(connection);
+	private void createTableIfNotExists() {
+		String query = "CREATE TABLE IF NOT EXISTS directory_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, lastName VARCHAR(255) NOT NULL, firstName VARCHAR(255), email VARCHAR(255) NOT NULL, category VARCHAR(50) NOT NULL, description TEXT, discordUserId BIGINT)";
+		Statement statement = null;
+		boolean hasStatement = false;
+
+		try {
+			statement = this.db.getStatement();
+			statement.execute(query);
+		} catch (SQLException e) {
+			// Log ignored based on constraint rules, fail silently
+		} finally {
+			hasStatement = (statement != null);
+			if (hasStatement) {
+				try {
+					statement.close();
+				} catch (SQLException e) {
+					// Ignore close exception
+				}
+			}
+		}
 	}
 
 	@Override
@@ -36,14 +58,14 @@ public class DirectoryRepository extends AbstractRepository<DirectoryEntry> {
 
 	@Override
 	protected Object primaryKeyValue(DirectoryEntry dataObject) {
-		Object value = dataObject.getId().toString();
+		Object value = dataObject.getId();
 		return value;
 	}
 
 	@Override
 	protected List<Object> dataObjectToRow(DirectoryEntry entry) {
 		List<Object> row = Arrays.asList(
-				entry.getId().toString(),
+				entry.getId(),
 				entry.getLastName(),
 				entry.getFirstName(),
 				entry.getEmail(),
@@ -59,7 +81,7 @@ public class DirectoryRepository extends AbstractRepository<DirectoryEntry> {
 		long discordId = 0L;
 		boolean isDiscordIdNull = false;
 
-		entry.setId(UUID.fromString(resultSet.getString("id")));
+		entry.setId(resultSet.getLong("id"));
 		entry.setLastName(resultSet.getString("lastName"));
 		entry.setFirstName(resultSet.getString("firstName"));
 		entry.setEmail(resultSet.getString("email"));

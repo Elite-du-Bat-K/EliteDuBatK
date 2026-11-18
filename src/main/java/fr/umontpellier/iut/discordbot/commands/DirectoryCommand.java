@@ -5,6 +5,7 @@ import fr.umontpellier.iut.discordbot.database.dataobjects.DirectoryEntry;
 import fr.umontpellier.iut.discordbot.database.repositories.DirectoryRepository;
 import fr.umontpellier.iut.discordbot.lib.AbstractCommand;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
@@ -31,7 +32,7 @@ public class DirectoryCommand extends AbstractCommand {
 				.addOption(OptionType.USER, "utilisateur", "Associer un utilisateur Discord", false);
 
 		SubcommandData editData = new SubcommandData("modifier", "Modifier une entrée")
-				.addOption(OptionType.STRING, "id", "ID de l'entrée", true);
+				.addOption(OptionType.INTEGER, "id", "ID de l'entrée", true);
 
 		SubcommandData searchData = new SubcommandData("chercher", "Chercher parmi les entrées")
 				.addOption(OptionType.STRING, "recherche", "Nom ou catégorie", true);
@@ -40,7 +41,7 @@ public class DirectoryCommand extends AbstractCommand {
 				.addOption(OptionType.INTEGER, "page", "Numéro de page", false);
 
 		SubcommandData deleteData = new SubcommandData("supprimer", "Supprimer une entrée")
-				.addOption(OptionType.STRING, "id", "ID de l'entrée", true);
+				.addOption(OptionType.INTEGER, "id", "ID de l'entrée", true);
 
 		SlashCommandData commandData = Commands.slash("annuaire", "Gérer l'annuaire")
 				.addSubcommands(addData, editData, searchData, listData, deleteData);
@@ -74,6 +75,38 @@ public class DirectoryCommand extends AbstractCommand {
 
 		if (!canExecute) {
 			event.reply(errorMessage).setEphemeral(true).queue();
+		}
+	}
+
+	@Override
+	public void onModal(ModalInteractionEvent event) {
+		String modalId = "";
+		boolean isAdd = false;
+		boolean isEdit = false;
+		boolean isDirectoryModal = false;
+		boolean hasPermission = false;
+		String errorMessage = "Vous n'avez pas la permission de modifier l'annuaire.";
+
+		modalId = event.getModalId();
+		isAdd = modalId.startsWith("directory_add|");
+		isEdit = modalId.startsWith("directory_edit|");
+		isDirectoryModal = (isAdd || isEdit);
+
+		if (isDirectoryModal) {
+			hasPermission = this.checkMutationPermission(event.getMember());
+
+			if (hasPermission) {
+				if (isAdd) {
+					this.processAddModal(event, modalId);
+				}
+				if (isEdit) {
+					this.processEditModal(event, modalId);
+				}
+			}
+
+			if (!hasPermission) {
+				event.reply(errorMessage).setEphemeral(true).queue();
+			}
 		}
 	}
 
@@ -156,8 +189,73 @@ public class DirectoryCommand extends AbstractCommand {
 		event.replyModal(modal).queue();
 	}
 
+	private void processAddModal(ModalInteractionEvent event, String modalId) {
+		String[] parts = null;
+		String category = "";
+		String targetUserIdStr = "";
+		Long discordUserId = null;
+		boolean hasValidUserId = false;
+		String lastName = "";
+		String firstName = null;
+		String email = "";
+		String description = null;
+		boolean hasFirstName = false;
+		boolean hasDescription = false;
+		DirectoryRepository repo = null;
+		DirectoryEntry entry = null;
+		String responseMessage = "Échec de l'ajout de l'entrée.";
+		boolean success = false;
+
+		parts = modalId.split("\\|");
+		category = parts[1];
+		targetUserIdStr = parts[2];
+
+		hasValidUserId = !targetUserIdStr.equals("NONE");
+		if (hasValidUserId) {
+			discordUserId = Long.parseLong(targetUserIdStr);
+		}
+
+		lastName = event.getValue("lastName").getAsString();
+
+		hasFirstName = (event.getValue("firstName") != null && !event.getValue("firstName").getAsString().isEmpty());
+		if (hasFirstName) {
+			firstName = event.getValue("firstName").getAsString();
+		}
+
+		email = event.getValue("email").getAsString();
+
+		hasDescription = (event.getValue("description") != null
+				&& !event.getValue("description").getAsString().isEmpty());
+		if (hasDescription) {
+			description = event.getValue("description").getAsString();
+		}
+
+		entry = new DirectoryEntry();
+		entry.setLastName(lastName);
+		entry.setFirstName(firstName);
+		entry.setEmail(email);
+		entry.setCategory(category);
+		entry.setDescription(description);
+		entry.setDiscordUserId(discordUserId);
+
+		repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+
+		try {
+			repo.insert(entry);
+			success = true;
+		} catch (Exception e) {
+			success = false;
+		}
+
+		if (success) {
+			responseMessage = "Entrée ajoutée avec succès à l'annuaire.";
+		}
+
+		event.reply(responseMessage).setEphemeral(true).queue();
+	}
+
 	private void handleEdit(SlashCommandInteractionEvent event) {
-		String id = "";
+		long id = 0L;
 		boolean hasId = false;
 		DirectoryRepository repo = null;
 		Optional<DirectoryEntry> entryOpt = Optional.empty();
@@ -177,7 +275,7 @@ public class DirectoryCommand extends AbstractCommand {
 
 		hasId = (event.getOption("id") != null);
 		if (hasId) {
-			id = event.getOption("id").getAsString();
+			id = event.getOption("id").getAsLong();
 			repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
 			entryOpt = repo.findByPrimaryKey(id);
 			isPresent = entryOpt.isPresent();
@@ -230,6 +328,66 @@ public class DirectoryCommand extends AbstractCommand {
 		if (!isPresent) {
 			event.reply(errorMessage).setEphemeral(true).queue();
 		}
+	}
+
+	private void processEditModal(ModalInteractionEvent event, String modalId) {
+		String[] parts = null;
+		long id = 0L;
+		String lastName = "";
+		String firstName = null;
+		String email = "";
+		String description = null;
+		boolean hasFirstName = false;
+		boolean hasDescription = false;
+		DirectoryRepository repo = null;
+		Optional<DirectoryEntry> entryOpt = Optional.empty();
+		boolean isPresent = false;
+		DirectoryEntry entry = null;
+		String responseMessage = "Échec de la modification de l'entrée.";
+		boolean success = false;
+
+		parts = modalId.split("\\|");
+		id = Long.parseLong(parts[1]);
+
+		lastName = event.getValue("lastName").getAsString();
+
+		hasFirstName = (event.getValue("firstName") != null && !event.getValue("firstName").getAsString().isEmpty());
+		if (hasFirstName) {
+			firstName = event.getValue("firstName").getAsString();
+		}
+
+		email = event.getValue("email").getAsString();
+
+		hasDescription = (event.getValue("description") != null
+				&& !event.getValue("description").getAsString().isEmpty());
+		if (hasDescription) {
+			description = event.getValue("description").getAsString();
+		}
+
+		repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+		entryOpt = repo.findByPrimaryKey(id);
+		isPresent = entryOpt.isPresent();
+
+		if (isPresent) {
+			entry = entryOpt.get();
+			entry.setLastName(lastName);
+			entry.setFirstName(firstName);
+			entry.setEmail(email);
+			entry.setDescription(description);
+
+			try {
+				repo.update(entry);
+				success = true;
+			} catch (Exception e) {
+				success = false;
+			}
+		}
+
+		if (success) {
+			responseMessage = "Entrée modifiée avec succès.";
+		}
+
+		event.reply(responseMessage).setEphemeral(true).queue();
 	}
 
 	private void handleSearch(SlashCommandInteractionEvent event) {
@@ -318,7 +476,7 @@ public class DirectoryCommand extends AbstractCommand {
 	}
 
 	private void handleDelete(SlashCommandInteractionEvent event) {
-		String id = "";
+		long id = 0L;
 		String responseMessage = "Échec de la suppression. Entrée introuvable ou ID invalide.";
 		boolean hasId = false;
 		DirectoryRepository repo = null;
@@ -329,7 +487,7 @@ public class DirectoryCommand extends AbstractCommand {
 
 		hasId = (event.getOption("id") != null);
 		if (hasId) {
-			id = event.getOption("id").getAsString();
+			id = event.getOption("id").getAsLong();
 			repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
 			entryOpt = repo.findByPrimaryKey(id);
 			isPresent = entryOpt.isPresent();
