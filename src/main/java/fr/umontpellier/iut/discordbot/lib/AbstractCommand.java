@@ -7,6 +7,7 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.interactions.Interaction;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import org.jetbrains.annotations.NotNull;
@@ -51,6 +52,14 @@ public abstract class AbstractCommand extends SharedBot {
 	 */
 	public void onModal(ModalInteractionEvent event) {
 		event.reply("Ce formulaire n'est plus actif.").setEphemeral(true).queue();
+	}
+
+	/**
+	 * Un menu déroulant envoyé par cette commande. Il lui revient quand son identifiant commence par
+	 * {@code <nom de la commande>:}.
+	 */
+	public void onStringSelect(StringSelectInteractionEvent event) {
+		event.reply("Ce menu n'est plus actif.").setEphemeral(true).queue();
 	}
 
 	/**
