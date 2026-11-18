@@ -28,19 +28,19 @@ class PlanningFormatterTest {
 
     @Test
     void hoursAreDiscordTimestampsOfTheParisHour() {
-        // 08:00Z veut dire 08:00 à Paris, soit 06:00 UTC en heure d'été
-        StudyEvent summer = event("Maths", "2026-09-14T08:00:00.000Z", "2026-09-14T10:30:00.000Z", S1A);
+        // 08:00 à Paris, soit 06:00 UTC en heure d'été
+        StudyEvent summer = event("Maths", "2026-09-14T08:00:00.000+02:00", "2026-09-14T10:30:00.000+02:00", S1A);
         assertEquals("<t:1789365600:t> – <t:1789374600:t>", PlanningFormatter.hours(summer));
 
         // … et 07:00 UTC en heure d'hiver
-        StudyEvent winter = event("Maths", "2026-12-14T08:00:00.000Z", "2026-12-14T09:00:00.000Z", S1A);
+        StudyEvent winter = event("Maths", "2026-12-14T08:00:00.000+01:00", "2026-12-14T09:00:00.000+01:00", S1A);
         assertTrue(PlanningFormatter.hours(winter).startsWith("<t:1797231600:t>"), PlanningFormatter.hours(winter));
     }
 
     @Test
     void inheritedCoursesShowTheirGroup() {
-        StudyEvent own = event("TP", "2026-09-14T08:00:00.000Z", "2026-09-14T10:00:00.000Z", S1A);
-        StudyEvent inherited = event("CM", "2026-09-14T10:00:00.000Z", "2026-09-14T12:00:00.000Z", PROMO);
+        StudyEvent own = event("TP", "2026-09-14T08:00:00.000+02:00", "2026-09-14T10:00:00.000+02:00", S1A);
+        StudyEvent inherited = event("CM", "2026-09-14T10:00:00.000+02:00", "2026-09-14T12:00:00.000+02:00", PROMO);
 
         assertEquals("K018 · A. DAUMET", PlanningFormatter.details(own, Set.of("s1a")));
         assertEquals("K018 · A. DAUMET · BUT1", PlanningFormatter.details(inherited, Set.of("s1a")));
@@ -55,8 +55,8 @@ class PlanningFormatterTest {
     @Test
     void dayIsSortedByHour() {
         MessageEmbed embed = PlanningFormatter.day(MONDAY, List.of(S1A), List.of(
-                event("Après-midi", "2026-09-14T14:00:00.000Z", "2026-09-14T16:00:00.000Z", S1A),
-                event("Matin", "2026-09-14T08:00:00.000Z", "2026-09-14T10:00:00.000Z", S1A)
+                event("Après-midi", "2026-09-14T14:00:00.000+02:00", "2026-09-14T16:00:00.000+02:00", S1A),
+                event("Matin", "2026-09-14T08:00:00.000+02:00", "2026-09-14T10:00:00.000+02:00", S1A)
         ), SITE, SITE + "/planning?group=S1a");
 
         assertEquals("Planning S1a · lundi 14 septembre 2026", embed.getTitle());
@@ -74,8 +74,8 @@ class PlanningFormatterTest {
     @Test
     void weekHasOneFieldPerWeekdayAndWeekendOnlyWhenBusy() {
         MessageEmbed embed = PlanningFormatter.week(MONDAY, List.of(S1A), List.of(
-                event("Lundi", "2026-09-14T08:00:00.000Z", "2026-09-14T10:00:00.000Z", S1A),
-                event("Samedi", "2026-09-19T08:00:00.000Z", "2026-09-19T10:00:00.000Z", S1A)
+                event("Lundi", "2026-09-14T08:00:00.000+02:00", "2026-09-14T10:00:00.000+02:00", S1A),
+                event("Samedi", "2026-09-19T08:00:00.000+02:00", "2026-09-19T10:00:00.000+02:00", S1A)
         ), SITE, SITE + "/planning?group=S1a");
 
         assertEquals("Planning S1a · semaine du 14 septembre", embed.getTitle());
@@ -106,7 +106,7 @@ class PlanningFormatterTest {
     @Test
     void embedIsAcceptedByDiscord() {
         List<StudyEvent> many = java.util.stream.IntStream.range(0, 60)
-                .mapToObj(i -> event("Cours " + "y".repeat(80) + i, "2026-09-1" + (4 + i % 5) + "T08:00:00.000Z", "2026-09-1" + (4 + i % 5) + "T10:00:00.000Z", S1A))
+                .mapToObj(i -> event("Cours " + "y".repeat(80) + i, "2026-09-1" + (4 + i % 5) + "T08:00:00.000+02:00", "2026-09-1" + (4 + i % 5) + "T10:00:00.000+02:00", S1A))
                 .toList();
 
         assertTrue(PlanningFormatter.week(MONDAY, List.of(S1A), many, SITE, SITE + "/planning?group=S1a").isSendable());
