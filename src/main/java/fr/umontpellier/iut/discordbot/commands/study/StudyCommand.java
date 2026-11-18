@@ -5,6 +5,7 @@ import fr.umontpellier.iut.discordbot.lib.AbstractCommandWithAutocomplete;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.interactions.InteractionContextType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
@@ -22,7 +23,8 @@ public class StudyCommand extends AbstractCommandWithAutocomplete {
         this.subcommands = List.of(
                 new PlanningSubcommand(bot),
                 new HomeworkSubcommand(bot),
-                new AddHomeworkSubcommand(bot)
+                new AddHomeworkSubcommand(bot),
+                new RemindersSubcommand(bot)
         );
     }
 
@@ -54,6 +56,16 @@ public class StudyCommand extends AbstractCommandWithAutocomplete {
         find(parts.length > 1 ? parts[1] : null).ifPresentOrElse(
                 sub -> sub.onButton(event),
                 () -> event.reply("Ce bouton n'est plus actif.").setEphemeral(true).queue()
+        );
+    }
+
+    /** {@code study:<sous-commande>:…} */
+    @Override
+    public void onStringSelect(StringSelectInteractionEvent event) {
+        String[] parts = event.getComponentId().split(":", 3);
+        find(parts.length > 1 ? parts[1] : null).ifPresentOrElse(
+                sub -> sub.onStringSelect(event),
+                () -> event.reply("Ce menu n'est plus actif.").setEphemeral(true).queue()
         );
     }
 

@@ -15,6 +15,7 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import fr.umontpellier.iut.discordbot.studysuite.StudySuiteNotLinkedException;
 import fr.umontpellier.iut.discordbot.studysuite.StudySuiteRefusedException;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.GenericComponentInteractionCreateEvent;
 import net.dv8tion.jda.api.utils.messages.MessageEditData;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -133,6 +134,11 @@ public abstract class StudySubcommand extends SharedBot {
     /** Un bouton de cette sous-commande ({@code study:<sous-commande>:…}). */
     public void onButton(ButtonInteractionEvent event) {
         event.reply("Ce bouton n'est plus actif.").setEphemeral(true).queue();
+    }
+
+    /** Un menu déroulant de cette sous-commande ({@code study:<sous-commande>:…}). */
+    public void onStringSelect(StringSelectInteractionEvent event) {
+        event.reply("Ce menu n'est plus actif.").setEphemeral(true).queue();
     }
 
     /**
