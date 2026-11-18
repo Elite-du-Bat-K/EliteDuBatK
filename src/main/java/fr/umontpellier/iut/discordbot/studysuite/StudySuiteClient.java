@@ -1,6 +1,7 @@
 package fr.umontpellier.iut.discordbot.studysuite;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
@@ -8,6 +9,7 @@ import com.google.gson.reflect.TypeToken;
 import fr.umontpellier.iut.discordbot.config.ConfigStructure;
 import fr.umontpellier.iut.discordbot.studysuite.model.Assignment;
 import fr.umontpellier.iut.discordbot.studysuite.model.NewAssignment;
+import fr.umontpellier.iut.discordbot.studysuite.model.ReminderSettings;
 import fr.umontpellier.iut.discordbot.studysuite.model.RoleMapping;
 import fr.umontpellier.iut.discordbot.studysuite.model.StudyEvent;
 import fr.umontpellier.iut.discordbot.studysuite.model.StudyGroup;
@@ -28,9 +30,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * Client de l'API StudySuite.
@@ -51,6 +55,8 @@ public class StudySuiteClient {
 
     private final Logger logger = LoggerFactory.getLogger(StudySuiteClient.class);
     private final Gson gson = new Gson();
+    /** Pour les corps où un champ null doit être envoyé, et non omis. */
+    private final Gson gsonWithNulls = new GsonBuilder().serializeNulls().create();
     private final HttpClient http;
     private final String baseUrl;
     @Nullable
@@ -133,6 +139,77 @@ public class StudySuiteClient {
     public void setCompleted(String discordUserId, String assignmentId, boolean done) {
         send(done ? "POST" : "DELETE", "/api/assignments/" + URLEncoder.encode(assignmentId, StandardCharsets.UTF_8) + "/complete",
                 null, discordUserId, JsonElement.class);
+    }
+
+    /** Les rappels de cours en message privé de ce membre, avec tout ce que montre le panneau. */
+    public ReminderSettings getReminderSettings(String discordUserId) {
+        return send("GET", "/api/reminders/discord", null, discordUserId, ReminderSettings.class);
+    }
+
+    /** Active les rappels de ce membre, ou change leur délai. */
+    public ReminderSettings enableReminders(String discordUserId, int leadMinutes) {
+        return send("PUT", "/api/reminders/discord", gson.toJson(Map.of("leadMinutes", leadMinutes)), discordUserId,
+                ReminderSettings.class);
+    }
+
+    public ReminderSettings disableReminders(String discordUserId) {
+        return send("DELETE", "/api/reminders/discord", null, discordUserId, ReminderSettings.class);
+    }
+
+    /**
+     * Demande à StudySuite un message privé de test pour ce membre, qui reviendra par le flux.
+     *
+     * @return {@code sent}, {@code no-bot} (aucun bot sur le flux) ou {@code no-discord}
+     */
+    public String sendTestReminder(String discordUserId) {
+        JsonObject data = send("POST", "/api/reminders/discord/test", null, discordUserId, JsonObject.class);
+        return data.get("result").getAsString();
+    }
+
+    /** Signale à StudySuite si un rappel a pu être envoyé, pour que le membre le voie dans son panneau. */
+    public void reportReminderDelivery(String discordUserId, @Nullable String eventId, boolean ok, @Nullable String error) {
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("discordUserId", discordUserId);
+        report.put("eventId", eventId);
+        report.put("ok", ok);
+        if (error != null) {
+            report.put("error", error.length() > 300 ? error.substring(0, 300) : error);
+        }
+        send("POST", "/api/bot/reminders/deliveries", gsonWithNulls.toJson(report), null, JsonObject.class);
+    }
+
+    /**
+     * Ouvre le flux des rappels à envoyer (Server-Sent Events), ligne par ligne. Bloquant tant que le flux est ouvert :
+     * à lire hors du thread de JDA, et à fermer pour couper la connexion.
+     * <p>
+     * Pas de délai d'attente sur la requête : le flux reste ouvert indéfiniment, et c'est l'appelant qui détecte une
+     * connexion morte (StudySuite envoie un signe de vie toutes les 25 s).
+     */
+    public Stream<String> openReminderStream() {
+        if (apiKey == null) {
+            throw new StudySuiteException("No StudySuite API key configured, cannot open the reminder stream");
+        }
+        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/api/bot/reminders/stream"))
+                .header("Accept", "text/event-stream")
+                .header("Authorization", "Bot " + apiKey)
+                .GET()
+                .build();
+
+        HttpResponse<Stream<String>> response;
+        try {
+            response = http.send(request, HttpResponse.BodyHandlers.ofLines());
+        } catch (IOException e) {
+            throw new StudySuiteException("StudySuite is unreachable", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new StudySuiteException("Interrupted while opening the reminder stream", e);
+        }
+
+        if (response.statusCode() != 200) {
+            response.body().close();
+            throw new StudySuiteException("StudySuite answered " + response.statusCode() + " on the reminder stream");
+        }
+        return response.body();
     }
 
     private <T> T getData(String path, Type type) {
