@@ -89,8 +89,8 @@ public class DirectoryCommand extends AbstractCommand {
 		String errorMessage = "Vous n'avez pas la permission de modifier l'annuaire.";
 
 		modalId = event.getModalId();
-		isAdd = modalId.startsWith("annuaire_add|");
-		isEdit = modalId.startsWith("annuaire_edit|");
+		isAdd = modalId.startsWith("annuaire:add|");
+		isEdit = modalId.startsWith("annuaire:edit|");
 		isDirectoryModal = (isAdd || isEdit);
 
 		if (isDirectoryModal) {
@@ -177,7 +177,7 @@ public class DirectoryCommand extends AbstractCommand {
 		emailInput = TextInput.create("email", TextInputStyle.SHORT).setRequired(true).build();
 		descInput = TextInput.create("description", TextInputStyle.PARAGRAPH).setRequired(false).build();
 
-		modalId = "annuaire_add|" + category + "|" + targetUserId;
+		modalId = "annuaire:add|" + category + "|" + targetUserId;
 
 		modal = Modal.create(modalId, "Ajouter une entrée")
 				.addComponents(
@@ -312,7 +312,7 @@ public class DirectoryCommand extends AbstractCommand {
 
 				descInput = descBuilder.build();
 
-				modalId = "annuaire_edit|" + id;
+				modalId = "annuaire:edit|" + id;
 
 				modal = Modal.create(modalId, "Modifier une entrée")
 						.addComponents(

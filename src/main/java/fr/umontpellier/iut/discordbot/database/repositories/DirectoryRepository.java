@@ -16,24 +16,12 @@ public class DirectoryRepository extends AbstractRepository<DirectoryEntry> {
 	}
 
 	private void createTableIfNotExists() {
-		String query = "CREATE TABLE IF NOT EXISTS directory_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, lastName VARCHAR(255) NOT NULL, firstName VARCHAR(255), email VARCHAR(255) NOT NULL, category VARCHAR(50) NOT NULL, description TEXT, discordUserId BIGINT)";
-		Statement statement = null;
-		boolean hasStatement = false;
+		String query = "CREATE TABLE IF NOT EXISTS directory_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, lastName TEXT NOT NULL, firstName TEXT, email TEXT NOT NULL, category TEXT NOT NULL, description TEXT, discordUserId INTEGER)";
 
-		try {
-			statement = this.db.getStatement();
+		try (Statement statement = this.db.getStatement()) {
 			statement.execute(query);
 		} catch (SQLException e) {
-			// Log ignored based on constraint rules, fail silently
-		} finally {
-			hasStatement = (statement != null);
-			if (hasStatement) {
-				try {
-					statement.close();
-				} catch (SQLException e) {
-					// Ignore close exception
-				}
-			}
+			throw new RuntimeException(e);
 		}
 	}
 
