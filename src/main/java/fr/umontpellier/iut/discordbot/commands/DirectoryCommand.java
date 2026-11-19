@@ -12,6 +12,7 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.components.textinput.TextInput;
+import net.dv8tion.jda.api.components.textinput.TextInput.Builder;
 import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.components.label.Label;
 import net.dv8tion.jda.api.modals.Modal;
@@ -88,8 +89,8 @@ public class DirectoryCommand extends AbstractCommand {
 		String errorMessage = "Vous n'avez pas la permission de modifier l'annuaire.";
 
 		modalId = event.getModalId();
-		isAdd = modalId.startsWith("directory_add|");
-		isEdit = modalId.startsWith("directory_edit|");
+		isAdd = modalId.startsWith("annuaire_add|");
+		isEdit = modalId.startsWith("annuaire_edit|");
 		isDirectoryModal = (isAdd || isEdit);
 
 		if (isDirectoryModal) {
@@ -176,7 +177,7 @@ public class DirectoryCommand extends AbstractCommand {
 		emailInput = TextInput.create("email", TextInputStyle.SHORT).setRequired(true).build();
 		descInput = TextInput.create("description", TextInputStyle.PARAGRAPH).setRequired(false).build();
 
-		modalId = "directory_add|" + category + "|" + targetUserId;
+		modalId = "annuaire_add|" + category + "|" + targetUserId;
 
 		modal = Modal.create(modalId, "Ajouter une entrée")
 				.addComponents(
@@ -268,9 +269,7 @@ public class DirectoryCommand extends AbstractCommand {
 		String modalId = "";
 		Modal modal = null;
 		String errorMessage = "Échec de la modification. Entrée introuvable.";
-		String currentFirstName = "";
 		boolean hasFirstName = false;
-		String currentDesc = "";
 		boolean hasDesc = false;
 
 		hasId = (event.getOption("id") != null);
@@ -288,30 +287,32 @@ public class DirectoryCommand extends AbstractCommand {
 						.setValue(entry.getLastName())
 						.build();
 
-				hasFirstName = (entry.getFirstName() != null);
+				TextInput.Builder firstNameBuilder = TextInput.create("firstName", TextInputStyle.SHORT)
+						.setRequired(false);
+
+				hasFirstName = (entry.getFirstName() != null && !entry.getFirstName().isEmpty());
 				if (hasFirstName) {
-					currentFirstName = entry.getFirstName();
+					firstNameBuilder.setValue(entry.getFirstName());
 				}
-				firstNameInput = TextInput.create("firstName", TextInputStyle.SHORT)
-						.setRequired(false)
-						.setValue(currentFirstName)
-						.build();
+
+				firstNameInput = firstNameBuilder.build();
 
 				emailInput = TextInput.create("email", TextInputStyle.SHORT)
 						.setRequired(true)
 						.setValue(entry.getEmail())
 						.build();
 
-				hasDesc = (entry.getDescription() != null);
-				if (hasDesc) {
-					currentDesc = entry.getDescription();
-				}
-				descInput = TextInput.create("description", TextInputStyle.PARAGRAPH)
-						.setRequired(false)
-						.setValue(currentDesc)
-						.build();
+				TextInput.Builder descBuilder = TextInput.create("description", TextInputStyle.PARAGRAPH)
+						.setRequired(false);
 
-				modalId = "directory_edit|" + id;
+				hasDesc = (entry.getDescription() != null && !entry.getDescription().isEmpty());
+				if (hasDesc) {
+					descBuilder.setValue(entry.getDescription());
+				}
+
+				descInput = descBuilder.build();
+
+				modalId = "annuaire_edit|" + id;
 
 				modal = Modal.create(modalId, "Modifier une entrée")
 						.addComponents(
