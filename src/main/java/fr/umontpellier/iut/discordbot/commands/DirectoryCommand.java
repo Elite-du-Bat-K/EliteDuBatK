@@ -1,26 +1,31 @@
 package fr.umontpellier.iut.discordbot.commands;
 
 import fr.umontpellier.iut.discordbot.Bot;
+import fr.umontpellier.iut.discordbot.database.dataobjects.DirectoryCategory;
 import fr.umontpellier.iut.discordbot.database.dataobjects.DirectoryEntry;
 import fr.umontpellier.iut.discordbot.database.repositories.DirectoryRepository;
 import fr.umontpellier.iut.discordbot.lib.AbstractCommand;
-import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.label.Label;
+import net.dv8tion.jda.api.components.textinput.TextInput;
+import net.dv8tion.jda.api.components.textinput.TextInputStyle;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
-import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.components.textinput.TextInput;
-import net.dv8tion.jda.api.components.textinput.TextInput.Builder;
-import net.dv8tion.jda.api.components.textinput.TextInputStyle;
-import net.dv8tion.jda.api.components.label.Label;
 import net.dv8tion.jda.api.modals.Modal;
 
 import java.util.List;
 import java.util.Optional;
 
 public class DirectoryCommand extends AbstractCommand {
+	private static final int PAGE_SIZE = 10;
 
 	public DirectoryCommand(Bot bot) {
 		super(bot);
@@ -28,8 +33,12 @@ public class DirectoryCommand extends AbstractCommand {
 
 	@Override
 	public SlashCommandData getCommandInformation() {
+		OptionData categoryOption = new OptionData(OptionType.STRING, "categorie", "Catégorie de l'entrée", true)
+				.addChoice(DirectoryCategory.PROF.getDisplayName(), DirectoryCategory.PROF.name())
+				.addChoice(DirectoryCategory.SERVICE.getDisplayName(), DirectoryCategory.SERVICE.name());
+
 		SubcommandData addData = new SubcommandData("ajouter", "Ajouter une entrée")
-				.addOption(OptionType.STRING, "categorie", "Prof ou Service Administratif", true)
+				.addOptions(categoryOption)
 				.addOption(OptionType.USER, "utilisateur", "Associer un utilisateur Discord", false);
 
 		SubcommandData editData = new SubcommandData("modifier", "Modifier une entrée")
@@ -111,6 +120,38 @@ public class DirectoryCommand extends AbstractCommand {
 		}
 	}
 
+	@Override
+	public void onButton(ButtonInteractionEvent event) {
+		String buttonId = event.getComponentId();
+		boolean isPageButton = buttonId.startsWith("annuaire:page|");
+
+		if (isPageButton) {
+			String[] parts = buttonId.split("\\|");
+			boolean hasPagePart = (parts.length >= 3);
+
+			if (hasPagePart) {
+				int requestedPage = 1;
+				try {
+					requestedPage = Integer.parseInt(parts[2]);
+				} catch (NumberFormatException ignored) {
+					requestedPage = 1;
+				}
+
+				DirectoryRepository repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+				int totalEntries = repo.findAll().size();
+				int totalPages = Math.max(1, (int) Math.ceil((double) totalEntries / PAGE_SIZE));
+				int page = Math.min(Math.max(1, requestedPage), totalPages);
+
+				List<DirectoryEntry> results = repo.getPaginated(page, PAGE_SIZE);
+				String footer = "Page " + page + " / " + totalPages + " • " + totalEntries + " entrée(s)";
+				MessageEmbed embed = DirectoryFormatter.buildDirectoryEmbed("Annuaire du département", results, footer);
+				ActionRow paginationRow = DirectoryFormatter.buildPaginationRow(page, totalPages);
+
+				event.editMessageEmbeds(embed).setComponents(paginationRow).queue();
+			}
+		}
+	}
+
 	private boolean checkMutationPermission(Member member) {
 		boolean isAuthorized = false;
 		boolean hasMember = false;
@@ -151,7 +192,7 @@ public class DirectoryCommand extends AbstractCommand {
 	}
 
 	private void handleAdd(SlashCommandInteractionEvent event) {
-		String category = "Prof";
+		String category = DirectoryCategory.PROF.name();
 		String targetUserId = "NONE";
 		boolean hasCategoryOption = false;
 		boolean hasUserOption = false;
@@ -191,65 +232,52 @@ public class DirectoryCommand extends AbstractCommand {
 	}
 
 	private void processAddModal(ModalInteractionEvent event, String modalId) {
-		String[] parts = null;
-		String category = "";
-		String targetUserIdStr = "";
+		String[] parts = modalId.split("\\|");
+		DirectoryCategory category = DirectoryCategory.fromString(parts[1]);
+		String targetUserIdStr = parts[2];
 		Long discordUserId = null;
-		boolean hasValidUserId = false;
-		String lastName = "";
+		boolean hasValidUserId = !targetUserIdStr.equals("NONE");
+		String lastName = DirectoryFormatter.formatLastName(event.getValue("lastName").getAsString(), category);
 		String firstName = null;
-		String email = "";
+		String email = DirectoryFormatter.normalizeEmail(event.getValue("email").getAsString());
 		String description = null;
-		boolean hasFirstName = false;
-		boolean hasDescription = false;
-		DirectoryRepository repo = null;
-		DirectoryEntry entry = null;
-		String responseMessage = "Échec de l'ajout de l'entrée.";
+		boolean isEmailValid = DirectoryFormatter.isValidEmail(email);
+		String responseMessage = "Adresse e-mail invalide. Vérifiez le format (ex: prenom.nom@umontpellier.fr).";
 		boolean success = false;
 
-		parts = modalId.split("\\|");
-		category = parts[1];
-		targetUserIdStr = parts[2];
-
-		hasValidUserId = !targetUserIdStr.equals("NONE");
 		if (hasValidUserId) {
 			discordUserId = Long.parseLong(targetUserIdStr);
 		}
 
-		lastName = event.getValue("lastName").getAsString();
-
-		hasFirstName = (event.getValue("firstName") != null && !event.getValue("firstName").getAsString().isEmpty());
-		if (hasFirstName) {
-			firstName = event.getValue("firstName").getAsString();
+		if (event.getValue("firstName") != null) {
+			firstName = DirectoryFormatter.formatFirstName(event.getValue("firstName").getAsString());
 		}
 
-		email = event.getValue("email").getAsString();
-
-		hasDescription = (event.getValue("description") != null
-				&& !event.getValue("description").getAsString().isEmpty());
-		if (hasDescription) {
-			description = event.getValue("description").getAsString();
+		if (event.getValue("description") != null && !event.getValue("description").getAsString().trim().isEmpty()) {
+			description = event.getValue("description").getAsString().trim();
 		}
 
-		entry = new DirectoryEntry();
-		entry.setLastName(lastName);
-		entry.setFirstName(firstName);
-		entry.setEmail(email);
-		entry.setCategory(category);
-		entry.setDescription(description);
-		entry.setDiscordUserId(discordUserId);
+		if (isEmailValid) {
+			responseMessage = "Échec de l'ajout de l'entrée.";
+			DirectoryEntry entry = new DirectoryEntry();
+			entry.setLastName(lastName);
+			entry.setFirstName(firstName);
+			entry.setEmail(email);
+			entry.setCategory(category.name());
+			entry.setDescription(description);
+			entry.setDiscordUserId(discordUserId);
 
-		repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+			DirectoryRepository repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+			try {
+				repo.insert(entry);
+				success = true;
+			} catch (Exception e) {
+				success = false;
+			}
 
-		try {
-			repo.insert(entry);
-			success = true;
-		} catch (Exception e) {
-			success = false;
-		}
-
-		if (success) {
-			responseMessage = "Entrée ajoutée avec succès à l'annuaire.";
+			if (success) {
+				responseMessage = "Entrée ajoutée avec succès à l'annuaire.";
+			}
 		}
 
 		event.reply(responseMessage).setEphemeral(true).queue();
@@ -332,60 +360,49 @@ public class DirectoryCommand extends AbstractCommand {
 	}
 
 	private void processEditModal(ModalInteractionEvent event, String modalId) {
-		String[] parts = null;
-		long id = 0L;
-		String lastName = "";
+		String[] parts = modalId.split("\\|");
+		long id = Long.parseLong(parts[1]);
+		String rawLastName = event.getValue("lastName").getAsString();
 		String firstName = null;
-		String email = "";
+		String email = DirectoryFormatter.normalizeEmail(event.getValue("email").getAsString());
 		String description = null;
-		boolean hasFirstName = false;
-		boolean hasDescription = false;
-		DirectoryRepository repo = null;
-		Optional<DirectoryEntry> entryOpt = Optional.empty();
-		boolean isPresent = false;
-		DirectoryEntry entry = null;
-		String responseMessage = "Échec de la modification de l'entrée.";
+		boolean isEmailValid = DirectoryFormatter.isValidEmail(email);
+		String responseMessage = "Adresse e-mail invalide. Vérifiez le format (ex: prenom.nom@umontpellier.fr).";
 		boolean success = false;
 
-		parts = modalId.split("\\|");
-		id = Long.parseLong(parts[1]);
-
-		lastName = event.getValue("lastName").getAsString();
-
-		hasFirstName = (event.getValue("firstName") != null && !event.getValue("firstName").getAsString().isEmpty());
-		if (hasFirstName) {
-			firstName = event.getValue("firstName").getAsString();
+		if (event.getValue("firstName") != null) {
+			firstName = DirectoryFormatter.formatFirstName(event.getValue("firstName").getAsString());
 		}
 
-		email = event.getValue("email").getAsString();
-
-		hasDescription = (event.getValue("description") != null
-				&& !event.getValue("description").getAsString().isEmpty());
-		if (hasDescription) {
-			description = event.getValue("description").getAsString();
+		if (event.getValue("description") != null && !event.getValue("description").getAsString().trim().isEmpty()) {
+			description = event.getValue("description").getAsString().trim();
 		}
 
-		repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
-		entryOpt = repo.findByPrimaryKey(id);
-		isPresent = entryOpt.isPresent();
+		if (isEmailValid) {
+			responseMessage = "Échec de la modification de l'entrée.";
+			DirectoryRepository repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+			Optional<DirectoryEntry> entryOpt = repo.findByPrimaryKey(id);
+			boolean isPresent = entryOpt.isPresent();
 
-		if (isPresent) {
-			entry = entryOpt.get();
-			entry.setLastName(lastName);
-			entry.setFirstName(firstName);
-			entry.setEmail(email);
-			entry.setDescription(description);
+			if (isPresent) {
+				DirectoryEntry entry = entryOpt.get();
+				DirectoryCategory category = DirectoryCategory.fromString(entry.getCategory());
+				entry.setLastName(DirectoryFormatter.formatLastName(rawLastName, category));
+				entry.setFirstName(firstName);
+				entry.setEmail(email);
+				entry.setDescription(description);
 
-			try {
-				repo.update(entry);
-				success = true;
-			} catch (Exception e) {
-				success = false;
+				try {
+					repo.update(entry);
+					success = true;
+				} catch (Exception e) {
+					success = false;
+				}
 			}
-		}
 
-		if (success) {
-			responseMessage = "Entrée modifiée avec succès.";
+			if (success) {
+				responseMessage = "Entrée modifiée avec succès.";
+			}
 		}
 
 		event.reply(responseMessage).setEphemeral(true).queue();
@@ -393,110 +410,66 @@ public class DirectoryCommand extends AbstractCommand {
 
 	private void handleSearch(SlashCommandInteractionEvent event) {
 		String query = "";
-		boolean hasQuery = false;
-		DirectoryRepository repo = null;
-		List<DirectoryEntry> results = null;
-		StringBuilder sb = new StringBuilder();
-		String responseMessage = "Aucune entrée trouvée.";
-		boolean hasResults = false;
-		boolean isTooLong = false;
+		boolean hasQuery = (event.getOption("recherche") != null);
+		List<DirectoryEntry> results = List.of();
+		String title = "Résultats de recherche";
+		String footer = "0 résultat";
 
-		hasQuery = (event.getOption("recherche") != null);
 		if (hasQuery) {
 			query = event.getOption("recherche").getAsString();
-			repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+			title = "Recherche : « " + query + " »";
+			DirectoryRepository repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
 			results = repo.searchDirectory(query);
-			hasResults = !results.isEmpty();
-
-			if (hasResults) {
-				for (DirectoryEntry entry : results) {
-					sb.append("**").append(entry.getLastName()).append("**");
-					if (entry.getFirstName() != null) {
-						sb.append(" ").append(entry.getFirstName());
-					}
-					sb.append(" (").append(entry.getCategory()).append(") - ");
-					sb.append(entry.getEmail()).append(" [ID: ").append(entry.getId()).append("]\n");
-				}
-				responseMessage = sb.toString();
-			}
+			footer = results.size() + " résultat(s)";
 		}
 
-		isTooLong = (responseMessage.length() > 2000);
-		if (isTooLong) {
-			responseMessage = responseMessage.substring(0, 1996) + "...";
-		}
-
-		event.reply(responseMessage).setEphemeral(true).queue();
+		MessageEmbed embed = DirectoryFormatter.buildDirectoryEmbed(title, results, footer);
+		event.replyEmbeds(embed).setEphemeral(true).queue();
 	}
 
 	private void handleList(SlashCommandInteractionEvent event) {
 		int page = 1;
-		boolean hasPage = false;
-		boolean isInvalidPage = false;
-		DirectoryRepository repo = null;
-		List<DirectoryEntry> results = null;
-		StringBuilder sb = new StringBuilder();
-		String responseMessage = "L'annuaire est vide ou la page est introuvable.";
-		boolean hasResults = false;
-		int pageSize = 10;
-		boolean isTooLong = false;
+		boolean hasPage = (event.getOption("page") != null);
 
-		hasPage = (event.getOption("page") != null);
 		if (hasPage) {
 			page = (int) event.getOption("page").getAsLong();
 		}
 
-		isInvalidPage = (page < 1);
-		if (isInvalidPage) {
+		if (page < 1) {
 			page = 1;
 		}
 
-		repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
-		results = repo.getPaginated(page, pageSize);
-		hasResults = !results.isEmpty();
+		DirectoryRepository repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+		int totalEntries = repo.findAll().size();
+		int totalPages = Math.max(1, (int) Math.ceil((double) totalEntries / PAGE_SIZE));
 
-		if (hasResults) {
-			sb.append("=== Annuaire (Page ").append(page).append(") ===\n");
-			for (DirectoryEntry entry : results) {
-				sb.append("**").append(entry.getLastName()).append("**");
-				if (entry.getFirstName() != null) {
-					sb.append(" ").append(entry.getFirstName());
-				}
-				sb.append(" (").append(entry.getCategory()).append(") - ");
-				sb.append(entry.getEmail()).append(" [ID: ").append(entry.getId()).append("]\n");
-			}
-			responseMessage = sb.toString();
+		if (page > totalPages) {
+			page = totalPages;
 		}
 
-		isTooLong = (responseMessage.length() > 2000);
-		if (isTooLong) {
-			responseMessage = responseMessage.substring(0, 1996) + "...";
-		}
+		List<DirectoryEntry> results = repo.getPaginated(page, PAGE_SIZE);
+		String footer = "Page " + page + " / " + totalPages + " • " + totalEntries + " entrée(s)";
+		MessageEmbed embed = DirectoryFormatter.buildDirectoryEmbed("Annuaire du département", results, footer);
+		ActionRow paginationRow = DirectoryFormatter.buildPaginationRow(page, totalPages);
 
-		event.reply(responseMessage).setEphemeral(true).queue();
+		event.replyEmbeds(embed).addComponents(paginationRow).setEphemeral(true).queue();
 	}
 
 	private void handleDelete(SlashCommandInteractionEvent event) {
 		long id = 0L;
 		String responseMessage = "Échec de la suppression. Entrée introuvable ou ID invalide.";
-		boolean hasId = false;
-		DirectoryRepository repo = null;
-		Optional<DirectoryEntry> entryOpt = Optional.empty();
-		boolean isPresent = false;
-		int deletedCount = 0;
-		boolean isDeleted = false;
+		boolean hasId = (event.getOption("id") != null);
 
-		hasId = (event.getOption("id") != null);
 		if (hasId) {
 			id = event.getOption("id").getAsLong();
-			repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
-			entryOpt = repo.findByPrimaryKey(id);
-			isPresent = entryOpt.isPresent();
+			DirectoryRepository repo = this.getBot().getRepositories().getRepository(DirectoryRepository.class);
+			Optional<DirectoryEntry> entryOpt = repo.findByPrimaryKey(id);
+			boolean isPresent = entryOpt.isPresent();
 
 			if (isPresent) {
-				deletedCount = repo.deleteByPrimaryKey(id);
-				isDeleted = (deletedCount > 0);
-				if (isDeleted) {
+				int deletedCount = repo.deleteByPrimaryKey(id);
+
+				if (deletedCount > 0) {
 					responseMessage = "Entrée supprimée avec succès.";
 				}
 			}
