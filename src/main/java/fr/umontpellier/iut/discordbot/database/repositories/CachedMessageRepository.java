@@ -157,4 +157,17 @@ public class CachedMessageRepository extends AbstractRepository<CachedMessageDat
 
 		return success;
 	}
+
+	public List<CachedMessageData> findByAuthorId(long authorId) {
+		return this.query(
+				"SELECT message_id, channel_id, author_id, content, timestamp FROM cached_messages WHERE author_id = ? ORDER BY timestamp ASC",
+				statement -> statement.setLong(1, authorId),
+				this::resultSetToDataObject);
+	}
+
+	public int deleteByAuthorId(long authorId) {
+		return this.update(
+				"DELETE FROM cached_messages WHERE author_id = ?",
+				statement -> statement.setLong(1, authorId));
+	}
 }

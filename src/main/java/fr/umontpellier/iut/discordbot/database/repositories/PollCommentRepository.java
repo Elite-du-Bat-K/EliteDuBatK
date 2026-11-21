@@ -111,4 +111,10 @@ public class PollCommentRepository extends AbstractRepository<PollCommentReposit
 			return this.isAnonymous;
 		}
 	}
+
+	public int deleteByUserId(String userId) {
+		return this.update(
+				"DELETE FROM poll_comments WHERE user_id = ?",
+				statement -> statement.setString(1, userId));
+	}
 }

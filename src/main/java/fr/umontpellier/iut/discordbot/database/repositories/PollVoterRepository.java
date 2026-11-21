@@ -128,4 +128,10 @@ public class PollVoterRepository extends AbstractRepository<PollVoterRepository.
 			return this.userId;
 		}
 	}
+
+	public int deleteByUserId(String userId) {
+		return this.update(
+				"DELETE FROM poll_voters WHERE user_id = ?",
+				statement -> statement.setString(1, userId));
+	}
 }

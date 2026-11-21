@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class MessageCacheService {
 
 	private static final int BATCH_SIZE = 50;
-	private static final long NINETY_DAYS_MILLIS = 90L * 24L * 60L * 60L * 1000L;
+	private static final long THIRTY_DAYS_MILLIS = 30L * 24L * 60L * 60L * 1000L;
 
 	private final BoundedCache<Long, CachedMessage> memoryCache;
 	private final BlockingQueue<CachedMessage> pendingInserts;
@@ -53,7 +53,7 @@ public class MessageCacheService {
 		return success;
 	}
 
-	public boolean cacheMessage(CachedMessage message) {
+	public synchronized boolean cacheMessage(CachedMessage message) {
 		boolean success = false;
 		boolean isValid = message != null;
 
@@ -66,8 +66,13 @@ public class MessageCacheService {
 		return success;
 	}
 
-	public CachedMessage getMessage(long messageId) {
+	public synchronized CachedMessage getMessage(long messageId) {
 		return this.memoryCache.get(messageId);
+	}
+
+	public synchronized void removeMessagesByAuthor(long authorId) {
+		this.memoryCache.entrySet().removeIf(entry -> entry.getValue().getAuthorId() == authorId);
+		this.pendingInserts.removeIf(msg -> msg.getAuthorId() == authorId);
 	}
 
 	private void runDaemon() {
@@ -133,7 +138,7 @@ public class MessageCacheService {
 	}
 
 	private boolean purgeOldMessages() {
-		long threshold = System.currentTimeMillis() - NINETY_DAYS_MILLIS;
+		long threshold = System.currentTimeMillis() - THIRTY_DAYS_MILLIS;
 		return this.repository.deleteOlderThan(threshold);
 	}
 

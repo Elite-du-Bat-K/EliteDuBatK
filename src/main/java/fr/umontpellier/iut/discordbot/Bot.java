@@ -5,6 +5,7 @@ import fr.umontpellier.iut.discordbot.config.ConfigLoader;
 import fr.umontpellier.iut.discordbot.database.RepositoryFactory;
 import fr.umontpellier.iut.discordbot.events.EventManager;
 import fr.umontpellier.iut.discordbot.services.CryptoReceiptService;
+import fr.umontpellier.iut.discordbot.services.GdprService;
 import fr.umontpellier.iut.discordbot.services.LogSender;
 import fr.umontpellier.iut.discordbot.services.MessageCacheService;
 import fr.umontpellier.iut.discordbot.services.ServiceStatusMonitor;
@@ -25,6 +26,8 @@ public class Bot implements Runnable {
 	private static final Logger LOGGER = LoggerFactory.getLogger(Bot.class);
 	private static final int MAX_CACHED_MESSAGES = 10000;
 
+	@NotNull
+	private final GdprService gdprService;
 	@NotNull
 	private final ConfigLoader config;
 	@NotNull
@@ -60,6 +63,8 @@ public class Bot implements Runnable {
 		statusMonitor = new ServiceStatusMonitor(config.get().getStatusTargets(), config.get().getStatusInterval());
 		statusMonitor.start();
 		cryptoReceiptService = new CryptoReceiptService();
+		gdprService = new GdprService(this);
+		gdprService.start();
 
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			try {
@@ -119,6 +124,11 @@ public class Bot implements Runnable {
 	@NotNull
 	public CryptoReceiptService getCryptoReceiptService() {
 		return cryptoReceiptService;
+	}
+
+	@NotNull
+	public GdprService getGdprService() {
+		return gdprService;
 	}
 
 	@Override
