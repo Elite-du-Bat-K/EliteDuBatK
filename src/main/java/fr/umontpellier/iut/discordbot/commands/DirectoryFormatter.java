@@ -110,7 +110,7 @@ public class DirectoryFormatter {
 					fieldTitle.append(" ").append(entry.getFirstName());
 				}
 
-				fieldValue.append("📧 `").append(entry.getEmail()).append("`");
+				fieldValue.append("📧 ```text\n").append(entry.getEmail()).append("\n```");
 
 				boolean hasDiscordUser = (entry.getDiscordUserId() != null);
 				if (hasDiscordUser) {
