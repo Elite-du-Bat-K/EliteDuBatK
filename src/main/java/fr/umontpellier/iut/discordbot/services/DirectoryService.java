@@ -296,7 +296,7 @@ public class DirectoryService {
 				.append("` | Refuser : `/annuaire-admin reject ").append(changeId).append("`");
 
 		this.bot.getLogSender().sendLog(
-				ConfigStructure.SystemChannel.CONTACT_CHANNEL,
+				ConfigStructure.SystemChannel.MODERATION_CHANNEL,
 				"# Demande de modification d'annuaire",
 				PENDING_COLOR,
 				details.toString());
