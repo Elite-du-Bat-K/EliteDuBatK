@@ -5,6 +5,7 @@ import fr.umontpellier.iut.discordbot.config.ConfigLoader;
 import fr.umontpellier.iut.discordbot.database.RepositoryFactory;
 import fr.umontpellier.iut.discordbot.events.EventManager;
 import fr.umontpellier.iut.discordbot.services.CryptoReceiptService;
+import fr.umontpellier.iut.discordbot.services.DirectoryService;
 import fr.umontpellier.iut.discordbot.services.GdprService;
 import fr.umontpellier.iut.discordbot.services.LogSender;
 import fr.umontpellier.iut.discordbot.services.MessageCacheService;
@@ -48,6 +49,8 @@ public class Bot implements Runnable {
 	private final ServiceStatusMonitor statusMonitor;
 	@NotNull
 	private final CryptoReceiptService cryptoReceiptService;
+	@NotNull
+	private final DirectoryService directoryService;
 
 	public Bot() throws SQLException {
 		config = new ConfigLoader();
@@ -65,6 +68,7 @@ public class Bot implements Runnable {
 		cryptoReceiptService = new CryptoReceiptService();
 		gdprService = new GdprService(this);
 		gdprService.start();
+		directoryService = new DirectoryService(this);
 
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			try {
@@ -129,6 +133,11 @@ public class Bot implements Runnable {
 	@NotNull
 	public GdprService getGdprService() {
 		return gdprService;
+	}
+
+	@NotNull
+	public DirectoryService getDirectoryService() {
+		return directoryService;
 	}
 
 	@Override

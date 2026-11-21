@@ -37,7 +37,7 @@ public class ConfigStructure {
 		HONEYPOT_CHANNEL("honeypot_channel"),
 
 		@SerializedName("contact_channel")
-		DIRECTORY_CHANNEL("contact_channel");
+		CONTACT_CHANNEL("contact_channel");
 
 		private final String chanType;
 
