@@ -43,6 +43,7 @@ public class MessageCacheService {
 		boolean tableCreated = this.repository.createTableIfNotExists();
 
 		if (tableCreated) {
+			this.purgeOldMessages();
 			this.loadRecentMessagesFromDatabase();
 			this.daemonThread.start();
 			this.scheduler.scheduleAtFixedRate(this::purgeOldMessages, 1, 1, TimeUnit.DAYS);
