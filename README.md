@@ -28,7 +28,8 @@ La configuration est lue dans `config.json` (dossier courant), ou dans le fichie
 		"role_log_channel": "ID_DU_SALON",
 		"member_log_channel": "ID_DU_SALON",
 		"moderation_channel": "ID_DU_SALON",
-		"honeypot_channel": "ID_DU_SALON"
+		"honeypot_channel": "ID_DU_SALON",
+		"contact_channel": "ID_DU_SALON"
 	},
 	"studySuite": {
 		"baseUrl": "https://study-info.umontp.fr",
@@ -68,6 +69,7 @@ Salons importants (logs, usage réservé) (`channels`) :
 | `member_log_channel` | LOGS Rôles et pseudo des membres, départs |
 | `moderation_channel` | LOGS Bannissements, expulsions, exclusions temporaires (et leur levée) |
 | `honeypot_channel` | Tout message écrit ici provoque le bannissement de son auteur |
+| `contact_channel` | Salon dédié à l'annuaire |
 
 Les logs de salons, rôles, membres et sanctions viennent du journal d'audit Discord : ils indiquent l'auteur de l'action et la raison éventuelle. Le bot a besoin de la permission **Voir les logs du serveur**. Les actions faites par le bot lui-même (ex. `/lock`) n'y sont pas journalisées, elles ont leurs propres logs.
 

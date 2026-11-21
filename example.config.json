@@ -14,7 +14,8 @@
 		"role_log_channel": "",
 		"member_log_channel": "",
 		"moderation_channel": "",
-		"honeypot_channel": ""
+		"honeypot_channel": "",
+		"contact_channel": ""
 	},
 	"studySuite": {
 		"baseUrl": "https://study-info.umontp.fr",

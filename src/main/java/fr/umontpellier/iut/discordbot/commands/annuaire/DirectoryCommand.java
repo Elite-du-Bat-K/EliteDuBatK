@@ -1,4 +1,4 @@
-package fr.umontpellier.iut.discordbot.commands;
+package fr.umontpellier.iut.discordbot.commands.annuaire;
 
 import fr.umontpellier.iut.discordbot.Bot;
 import fr.umontpellier.iut.discordbot.database.dataobjects.DirectoryCategory;

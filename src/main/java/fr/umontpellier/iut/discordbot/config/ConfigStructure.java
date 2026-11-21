@@ -34,7 +34,10 @@ public class ConfigStructure {
 		MODERATION_CHANNEL("moderation_channel"),
 
 		@SerializedName("honeypot_channel")
-		HONEYPOT_CHANNEL("honeypot_channel");
+		HONEYPOT_CHANNEL("honeypot_channel"),
+
+		@SerializedName("contact_channel")
+		DIRECTORY_CHANNEL("contact_channel");
 
 		private final String chanType;
 
